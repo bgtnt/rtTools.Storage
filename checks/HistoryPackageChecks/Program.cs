@@ -32,6 +32,9 @@ RunSuite("resource-lifetime", ResourceLifetimeChecks.Contracts);
 RunSuite("stream-persistence", StreamPersistenceChecks.Contracts);
 RunSuite("buffered-queue", BufferedQueueChecks.Contracts);
 RunSuite("dictionary-logger", DictionaryLoggerChecks.Contracts);
+RunSuite("timelog-client-errors", TimeLogClientExceptionChecks.Contracts);
+RunSuite("collection-lifetime", CollectionLifetimeChecks.Contracts);
+RunSuite("storage-bounds", DataStorageBoundsChecks.Contracts);
 
 string resultPath = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);

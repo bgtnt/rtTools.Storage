@@ -101,11 +101,15 @@ namespace RtTools
             Converter<T, byte[]>? itemWriter = null,
             DataStorage.OnException onException = DataStorage.OnException.Default,
             DataStorage.OpenStateDelegate? listener = null) :
-            this(File.Open(fileName, mode, access, share), headerSize, itemReader, itemWriter, onException, listener) { }
+            this(OpenFile(fileName, mode, access, share, itemReader, itemWriter), headerSize, itemReader, itemWriter, onException, listener) { }
 
         /// <summary>
         /// Open a persistent list over an existing stream.
         /// </summary>
+        /// <remarks>
+        /// Argument validation leaves the caller's stream open. After validation, the list owns the stream until disposal.
+        /// It attempts to close the stream on initialization failure; cleanup errors do not replace the initialization error.
+        /// </remarks>
         public ListPersistent(
             Stream stream,
             ushort headerSize = 0,
@@ -114,19 +118,21 @@ namespace RtTools
             DataStorage.OnException onException = DataStorage.OnException.Default,
             DataStorage.OpenStateDelegate? listener = null)
         {
-            if ((this.itemReader = itemReader) == null ^ (this.itemWriter = itemWriter) == null)
-                throw new ArgumentException("reader-writer pair should be provided");
-            this.records = [];
-            DataStorage storage = new(stream, (pos, data) => this.records.Add(this.FromBytes(data, pos)), null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
-                listener: (state, data) =>
-                {
-                    if (state == DataStorage.OpenState.Recovered ||
-                        (state & DataStorage.OpenState.Cleared) == DataStorage.OpenState.Cleared)
-                        this.records.Clear();
-                    listener?.Invoke(state, data);
-                });
+            ArgumentNullException.ThrowIfNull(stream);
+            ValidateCodecPair(itemReader, itemWriter);
+            this.itemReader = itemReader;
+            this.itemWriter = itemWriter;
             try
             {
+                this.records = [];
+                DataStorage storage = new(stream, (pos, data) => this.records.Add(this.FromBytes(data, pos)), null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
+                    listener: (state, data) =>
+                    {
+                        if (state == DataStorage.OpenState.Recovered ||
+                            (state & DataStorage.OpenState.Cleared) == DataStorage.OpenState.Cleared)
+                            this.records.Clear();
+                        listener?.Invoke(state, data);
+                    });
                 this.records.Sort((x, y) =>
                 {
                     int order = x.Index.CompareTo(y.Index);
@@ -137,13 +143,27 @@ namespace RtTools
                     if (!IsFiniteIndex(item.Index))
                         throw new InvalidDataException("Stored list sort indices must be finite.");
                 }
+                this.Storage = new SynchronizedDataStorage(storage);
             }
             catch
             {
-                storage.Dispose();
+                try { stream.Dispose(); }
+                catch { } // Preserve the initialization failure after attempting to release the owned stream.
                 throw;
             }
-            this.Storage = new SynchronizedDataStorage(storage);
+        }
+
+        private static void ValidateCodecPair(Converter<byte[], T>? itemReader, Converter<T, byte[]>? itemWriter)
+        {
+            if ((itemReader == null) != (itemWriter == null))
+                throw new ArgumentException("reader-writer pair should be provided");
+        }
+
+        private static FileStream OpenFile(string fileName, FileMode mode, FileAccess access, FileShare share,
+            Converter<byte[], T>? itemReader, Converter<T, byte[]>? itemWriter)
+        {
+            ValidateCodecPair(itemReader, itemWriter);
+            return File.Open(fileName, mode, access, share);
         }
 
         /// <summary>

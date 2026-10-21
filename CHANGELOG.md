@@ -1,5 +1,21 @@
 # Release notes
 
+## 0.1.0-preview.3 — 2026-10-21
+
+Corrects three storage/error-path defects without changing public APIs, record
+layouts or runtime dependencies.
+
+- TimeLogClient propagates decoder, action and predicate EndOfStreamException
+  failures. Only physical sequential reads retain the existing EOF handling;
+  partial-main-tail and header-count behavior are documented separately.
+- DictionaryPersistent/ListPersistent validate paired codecs before opening a
+  filename, preserving existing bytes even with FileMode.Create. Failed
+  initialization attempts to release accepted owned streams and preserves the primary error.
+- DataStorage validates record header/payload bounds and integer lengths before
+  allocation, callbacks or record acceptance, including opens without a scanner.
+- Package-only regression suites join all existing checks. A safe before/after
+  harness demonstrates the defects against preview.2 and the corrected behavior.
+
 ## 0.1.0-preview.2 — 2026-10-21
 
 Completes the original object-persistence, persistent FIFO and dictionary-snapshot

@@ -23,3 +23,6 @@ checks/HistoryAcceptance/*
 !checks/HistoryAcceptance/StreamPersistenceChecks.cs
 !checks/HistoryAcceptance/BufferedQueueChecks.cs
 !checks/HistoryAcceptance/DictionaryLoggerChecks.cs
+!checks/HistoryAcceptance/TimeLogClientExceptionChecks.cs
+!checks/HistoryAcceptance/CollectionLifetimeChecks.cs
+!checks/HistoryAcceptance/DataStorageBoundsChecks.cs

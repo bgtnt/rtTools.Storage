@@ -44,6 +44,13 @@ namespace RtTools
                 this.DataLength = BinaryPrimitives.ReadInt32LittleEndian(source[20..]);
             }
 
+            public readonly void ValidateBounds(long streamLength)
+            {
+                if (this.DataLength < 0 || this.DataLength > int.MaxValue - HeaderSize ||
+                    this.DataLength > streamLength - this.Position - HeaderSize)
+                    throw new DataSourceException("invalid record payload length at " + this.Position + ": " + this.DataLength);
+            }
+
             public readonly void Write(Span<byte> destination)
             {
                 BinaryPrimitives.WriteInt64LittleEndian(destination, this.Prev);

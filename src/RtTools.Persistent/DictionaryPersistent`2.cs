@@ -103,11 +103,15 @@ namespace RtTools
             Converter<KeyValuePair<TKey, TValue>, byte[]>? writer = null,
             DataStorage.OnException onException = DataStorage.OnException.Default,
             DataStorage.OpenStateDelegate? listener = null
-            ) : this(File.Open(fileName, mode, access, share), headerSize, reader, writer, onException, listener) { }
+            ) : this(OpenFile(fileName, mode, access, share, reader, writer), headerSize, reader, writer, onException, listener) { }
 
         /// <summary>
         /// new persistent dictionary
         /// </summary>
+        /// <remarks>
+        /// Argument validation leaves the caller's stream open. After validation, the dictionary owns the stream until disposal.
+        /// It attempts to close the stream on initialization failure; cleanup errors do not replace the initialization error.
+        /// </remarks>
         public DictionaryPersistent(
             Stream stream,
             ushort headerSize = 0,
@@ -116,19 +120,42 @@ namespace RtTools
             DataStorage.OnException onException = DataStorage.OnException.Default,
             DataStorage.OpenStateDelegate? listener = null)
         {
-            if ((this.itemReader = reader) == null ^ (this.itemWriter = writer) == null)
-                throw new ArgumentException("reader-writer pair should be provided");
+            ArgumentNullException.ThrowIfNull(stream);
+            ValidateCodecPair(reader, writer);
+            this.itemReader = reader;
+            this.itemWriter = writer;
+            try
+            {
+                this.itemsByKey = [];
+                DataStorage storage = new(stream, this.OnDataScan, null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
+                    listener: (state, data) =>
+                    {
+                        if (state == DataStorage.OpenState.Recovered ||
+                            (state & DataStorage.OpenState.Cleared) == DataStorage.OpenState.Cleared)
+                            this.itemsByKey.Clear();
+                        listener?.Invoke(state, data);
+                    });
+                this.Storage = new SynchronizedDataStorage(storage);
+            }
+            catch
+            {
+                try { stream.Dispose(); }
+                catch { } // Preserve the initialization failure after attempting to release the owned stream.
+                throw;
+            }
+        }
 
-            this.itemsByKey = [];
-            DataStorage storage = new(stream, this.OnDataScan, null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
-                listener: (state, data) =>
-                {
-                    if (state == DataStorage.OpenState.Recovered ||
-                        (state & DataStorage.OpenState.Cleared) == DataStorage.OpenState.Cleared)
-                        this.itemsByKey.Clear();
-                    listener?.Invoke(state, data);
-                });
-            this.Storage = new SynchronizedDataStorage(storage);
+        private static void ValidateCodecPair(Converter<byte[], KeyValuePair<TKey, TValue>>? reader, Converter<KeyValuePair<TKey, TValue>, byte[]>? writer)
+        {
+            if ((reader == null) != (writer == null))
+                throw new ArgumentException("reader-writer pair should be provided");
+        }
+
+        private static FileStream OpenFile(string fileName, FileMode mode, FileAccess access, FileShare share,
+            Converter<byte[], KeyValuePair<TKey, TValue>>? reader, Converter<KeyValuePair<TKey, TValue>, byte[]>? writer)
+        {
+            ValidateCodecPair(reader, writer);
+            return File.Open(fileName, mode, access, share);
         }
 
         /// <summary>

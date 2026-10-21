@@ -3,7 +3,7 @@
   "SourceProject": "RtTools (owner-provided source)",
   "SourceCommit": "c66f77bdcf6a69cb5e4426243335b3ce1540b545",
   "PackageId": "rtTools.Storage",
-  "PackageVersion": "0.1.0-preview.2",
+  "PackageVersion": "0.1.0-preview.3",
   "License": "MIT",
   "ReviewedHistory": {
     "InitialImportCommit": "eef6dbe69aba3581bcbb096a5f89ab8ee564ae85",
@@ -19,32 +19,40 @@
       "Source": "rttools.Net10/DictionaryPersistent`2.cs",
       "Copy": "src/RtTools.Persistent/DictionaryPersistent`2.cs",
       "SourceSha256": "729638CC37877F44FA51A4760F7E8421EC716BD598706B5F54BA9BE9D4DF9075",
-      "CopySha256": "729638CC37877F44FA51A4760F7E8421EC716BD598706B5F54BA9BE9D4DF9075",
-      "Changes": [],
+      "CopySha256": "E8FC28B5974DE3D9BA4B00C7A94EB585702EBA1D1D4A7D7AB36D56C4FC314896",
+      "Changes": [
+        "Validate paired codecs before filename open; preserve caller ownership on argument rejection and attempt owned stream cleanup on all initialization failures without replacing the primary error."
+      ],
       "SourceGitBlobSha256": "134C55AF58D8AF80F1F436A737443C79E3FD9584FA21BB5586B97F412A8B62F1"
     },
     {
       "Source": "rttools.Net10/ListPersistent`1.cs",
       "Copy": "src/RtTools.Persistent/ListPersistent`1.cs",
       "SourceSha256": "0E9CB206D7CD3F0E28C738F6A5AB073C78C4253FBC4B070FF1D001BCA2CE1FCF",
-      "CopySha256": "0E9CB206D7CD3F0E28C738F6A5AB073C78C4253FBC4B070FF1D001BCA2CE1FCF",
-      "Changes": [],
+      "CopySha256": "86166BC92AE249244D42B2AB5F6619AA8A4436420280E5064052B01958C89241",
+      "Changes": [
+        "Validate paired codecs before filename open; preserve caller ownership on argument rejection and attempt owned stream cleanup across initialization and post-scan validation failures without replacing the primary error."
+      ],
       "SourceGitBlobSha256": "5B30B0D3F6EB16A50BDAE81318E25C9A00CBCC8685DF510D8E593D0D4C1DDC86"
     },
     {
       "Source": "rttools.Net10/DataStorage.cs",
       "Copy": "src/RtTools.Persistent/DataStorage.cs",
       "SourceSha256": "DC6F28A0A9CA431079C7425630672B26216E05785EBF4253601DF7BD4FB978AB",
-      "CopySha256": "DC6F28A0A9CA431079C7425630672B26216E05785EBF4253601DF7BD4FB978AB",
-      "Changes": [],
+      "CopySha256": "1CBE8A89AF8CBF91553F692A10A09D93633485390819D39DE3573FD0FF8FBB61",
+      "Changes": [
+        "Validate complete record headers and representable nonnegative payload bounds before constructor acceptance, allocation, callbacks and subsequent header-based reads; retain existing chain/recovery policy."
+      ],
       "SourceGitBlobSha256": "753B28EE140A6CF44A079FF399EDCC490228883F3F79C374694DB5729138BC3C"
     },
     {
       "Source": "rttools.Net10/DataStorage+DataHeader.cs",
       "Copy": "src/RtTools.Persistent/DataStorage+DataHeader.cs",
       "SourceSha256": "14D9E6BEA505F1E2EE3C959641DE9B245114C7E7422B0284AC557A3FAD971D7B",
-      "CopySha256": "14D9E6BEA505F1E2EE3C959641DE9B245114C7E7422B0284AC557A3FAD971D7B",
-      "Changes": [],
+      "CopySha256": "57CBA82A6FF5480EBC2193E7FD99723AD5A513172E764A848C3B7E72B27FE5FA",
+      "Changes": [
+        "Add shared subtraction-safe payload bounds validation, including the existing int record-length representation limit."
+      ],
       "SourceGitBlobSha256": "972CF7FE85FBDECA37B2E660569429899E25A818ADB9B8961C1D5EB37595F2DC"
     },
     {
@@ -239,10 +247,11 @@
       "Source": "rttools.Net10/Logger/TimeLogClient`1.cs",
       "Copy": "src/RtTools.History/Logger/TimeLogClient`1.cs",
       "SourceSha256": "C1077AC8515FE33447A008A99302BC5F7EE24FE8A1A5BAF962309E78F664D328",
-      "CopySha256": "250AD48649E1066B6563ACFBD221828138550852D2BB2CFB0D3E5C54E3545954",
+      "CopySha256": "A27080B7A5DB46276233EBE2AE637CDF7596B6C8270F509857F99249BA92F377",
       "Changes": [
         "Normalize both inclusive query bounds to UTC.",
-        "Release acquired main stream on constructor failure."
+        "Release acquired main stream on constructor failure.",
+        "Propagate application decoder/action/predicate exceptions by isolating physical EOF catches; preserve and document physical EOF prefix, header-count, partial-tail and binary-search behavior."
       ],
       "SourceGitBlobSha256": "74BF59F5E66B64562AA6E8DCFE9058BD553926A76018560F8B67AE156A95A182"
     },

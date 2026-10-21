@@ -84,11 +84,8 @@ namespace RtTools
                 long pos = this.FirstPosition;
                 while (pos != long.MinValue)
                 {
+                    header = this.ReadRecordHeader(pos, buffer);
                     yield return pos;
-                    this.Stream.Seek(pos, SeekOrigin.Begin);
-                    ReadExactly(this.Stream, buffer, RecordHeader.HeaderSize);
-                    // header.Position = pos;
-                    header.Read(buffer);
                     pos = header.Next;
                 }
             }
@@ -106,10 +103,7 @@ namespace RtTools
                 long pos = this.FirstPosition;
                 while (pos != long.MinValue)
                 {
-                    this.Stream.Seek(pos, SeekOrigin.Begin);
-                    ReadExactly(this.Stream, buffer, RecordHeader.HeaderSize);
-                    //header.Position = pos;
-                    header.Read(buffer);
+                    header = this.ReadRecordHeader(pos, buffer);
 
                     byte[] data = new byte[header.DataLength];
                     ReadExactly(this.Stream, data, header.DataLength);
@@ -174,6 +168,16 @@ namespace RtTools
 
                 buffer = buffer[read..];
             }
+        }
+
+        private RecordHeader ReadRecordHeader(long position, Span<byte> buffer)
+        {
+            long streamLength = this.Stream.Length;
+            if (position < this.DataOffset || position > streamLength - RecordHeader.HeaderSize)
+                throw new DataSourceException("record header is outside the stream at " + position);
+            RecordHeader header = new(this.Stream, position, buffer);
+            header.ValidateBounds(streamLength);
+            return header;
         }
 
         private static int ReadInt32LittleEndian(byte[] buffer, int offset = 0) =>
@@ -415,20 +419,17 @@ namespace RtTools
                         if (!(this.DataOffset <= pos && pos < streamLength)) // check position if is in range
                             throw new DataSourceException(pos + " is not between " + this.DataOffset + " and " + streamLength);
 
+                        // read record header
+                        header = this.ReadRecordHeader(pos, buffer);
+
+                        if (header.Prev != this.LastPosition)
+                            throw new DataSourceException("invalid chain detected at " + pos);
+
                         if (pos > start)
                         {
                             free += (pos - start);
                             this.MarkFree(start, pos);
                         }
-
-                        // read record header
-                        this.Stream.Seek(pos, SeekOrigin.Begin);
-                        ReadExactly(this.Stream, buffer, RecordHeader.HeaderSize);
-                        //header.Position = pos;
-                        header.Read(buffer);
-
-                        if (header.Prev != this.LastPosition)
-                            throw new DataSourceException("invalid chain detected at " + pos);
 
                         if (scanner)
                         { // data callback provided
@@ -545,7 +546,7 @@ namespace RtTools
         public byte[] GetData(long pos)
         {
             Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
-            RecordHeader header = new(this.Stream, pos, buffer);
+            RecordHeader header = this.ReadRecordHeader(pos, buffer);
             byte[] ret = new byte[header.DataLength];
             ReadExactly(this.Stream, ret, header.DataLength);
             return ret;
@@ -556,7 +557,7 @@ namespace RtTools
         internal long ReadDataPrefix(long pos, byte[] prefix)
         {
             Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
-            RecordHeader header = new(this.Stream, pos, buffer);
+            RecordHeader header = this.ReadRecordHeader(pos, buffer);
             if (header.DataLength < prefix.Length)
                 throw new InvalidDataException("Stored record is shorter than the requested prefix.");
             ReadExactly(this.Stream, prefix, prefix.Length);
@@ -620,7 +621,7 @@ namespace RtTools
             bool createRecord = !existing;
             if (existing)
             { // data is to be updated
-                RecordHeader header = new(this.Stream, pos, buffer);
+                RecordHeader header = this.ReadRecordHeader(pos, buffer);
                 if ((header.Next == long.MinValue) || // not last record - no need to worry about next
                     ((header.Next - pos - RecordHeader.HeaderSize) < dataLength) || // not enough space to store data
                     (pos > this.Stream.Length * this.moveFactor))  // id is close to the end of file - so move forward to defragment
@@ -649,11 +650,11 @@ namespace RtTools
 
                     if (found != null && (found.End < this.Stream.Length))
                     { // empty space found
-                        RecordHeader hNext = new(this.Stream, found.End, buffer);
+                        RecordHeader hNext = this.ReadRecordHeader(found.End, buffer);
                         pos = found.Start;
                         if (hNext.Prev != long.MinValue)
                         {
-                            RecordHeader h = new(this.Stream, hNext.Prev, buffer);
+                            RecordHeader h = this.ReadRecordHeader(hNext.Prev, buffer);
                             Debug.Assert(h.Next == found.End, h.Next + "!=" + found.End);
                             h.Next = pos;
                             h.Write(this.Stream, buffer);
@@ -669,7 +670,7 @@ namespace RtTools
                     }
                     else
                     { // no empty space found - write at the end of file
-                        RecordHeader header = new(this.Stream, this.LastPosition, buffer);
+                        RecordHeader header = this.ReadRecordHeader(this.LastPosition, buffer);
                         Debug.Assert(header.Next == long.MinValue, header.Next + "!=" + long.MinValue);
 
                         // update last record to point current as next
@@ -703,7 +704,7 @@ namespace RtTools
 
             if (header.Prev != long.MinValue)
             { // has previous (should mark previous to point next)
-                hPrev = new RecordHeader(this.Stream, header.Prev, buffer);
+                hPrev = this.ReadRecordHeader(header.Prev, buffer);
                 Debug.Assert(hPrev.Next == header.Position, hPrev.Next + "!=" + header.Position);
                 hPrev.Next = header.Next;
                 hPrev.Write(this.Stream, buffer);
@@ -718,7 +719,7 @@ namespace RtTools
 
             if (header.Next != long.MinValue)
             { // has next (should mark next to point previous)
-                RecordHeader h = new(this.Stream, header.Next, buffer);
+                RecordHeader h = this.ReadRecordHeader(header.Next, buffer);
                 Debug.Assert(h.Prev == header.Position, h.Prev + "!=" + header.Position);
                 h.Prev = header.Prev;
                 h.Write(this.Stream, buffer);
@@ -769,7 +770,7 @@ namespace RtTools
         public long Remove(long pos)
         {
             Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
-            return this.remove(new RecordHeader(this.Stream, pos, buffer), buffer);
+            return this.remove(this.ReadRecordHeader(pos, buffer), buffer);
         }
 
         #endregion

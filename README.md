@@ -3,7 +3,7 @@
 Embedded .NET storage for application state and indexed history. One BCL-only
 package targets .NET 10 with no external runtime dependencies.
 
-Current preview: `0.1.0-preview.2`. APIs and file formats may change before a stable
+Current preview: `0.1.0-preview.3`. APIs and file formats may change before a stable
 release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 | Need | Type | Model |
@@ -17,12 +17,12 @@ release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 ## Install
 
-Download `rtTools.Storage.0.1.0-preview.2.nupkg` from the
-[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.2)
+Download `rtTools.Storage.0.1.0-preview.3.nupkg` from the
+[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.3)
 into a local `packages` directory, then run:
 
 ```sh
-dotnet add package rtTools.Storage --version 0.1.0-preview.2 --source ./packages
+dotnet add package rtTools.Storage --version 0.1.0-preview.3 --source ./packages
 ```
 
 Packages are distributed through GitHub Releases. This release does not require
@@ -50,6 +50,16 @@ Updates may overwrite or relocate records. DataStorage tracks free regions,
 reuses suitable holes and truncates sufficiently large unused tails. It does not
 rewrite the entire collection on every mutation. List ordering uses finite
 floating labels; repeated insertion into a tight gap can exhaust them and throw.
+
+DictionaryPersistent/ListPersistent require each codec reader/writer pair
+together, validated before opening a filename or accepting a supplied stream.
+Rejected stream arguments leave ownership with the caller. Once initialization
+begins, the collection owns the stream and attempts to close it if initialization
+fails. The initialization error is preserved if cleanup itself throws.
+DataStorage checks complete record headers, nonnegative representable record
+lengths and payload bounds before allocation or acceptance, even without scan
+callbacks. The default CloseAndThrow policy preserves malformed input bytes;
+explicit recovery/clear policies have their separate destructive behavior.
 
 ## Public API overview
 
@@ -171,6 +181,15 @@ append time. With the default serializer an eligible null throws
 `ArgumentNullException`; explicit codecs can encode null if their reader returns
 a non-null record.
 
+TimeLogClient propagates application decoder, action and predicate exceptions,
+including EndOfStreamException. Physical EOF has a separate existing contract:
+an incomplete final main record is ignored; EOF while sequentially reading a
+payload stops decoded queries at the available prefix. ForEach increments its
+header count before reading that payload, so its return value can exceed the
+number of completed callbacks. Unfiltered CountAll/Exists inspect matching main
+headers without validating payloads. EOF during the initial binary search still
+propagates. These reader behaviors do not repair or validate damaged history.
+
 Log accepts out-of-order keys and duplicates. Append buffers; Publish, its timer,
 Flush or disposal publishes pending records. Queries see published records.
 FindAll returns key-sorted results; ForEach does not promise globally sorted
@@ -238,6 +257,8 @@ data to run-data/verify-*. History checks cover TimeLog boundaries, UTC/null
 regressions, synthetic Flush failures, Log publication, overlapping runs, payload
 layouts, tombstones and clean reopen. Object-persistence, bounded-queue and
 dictionary-snapshot suites test the new APIs through the package as well.
+Additional regressions cover application exceptions versus physical EOF,
+collection constructor ownership/validation and malformed DataStorage bounds.
 The UTC regression requires a nonzero local
 timezone offset; CI uses Europe/Sofia (Windows: FLE Standard Time).
 

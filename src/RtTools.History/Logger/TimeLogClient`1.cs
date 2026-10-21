@@ -8,11 +8,16 @@ using System.Threading;
 namespace RtTools.Logger
 {
     /// <summary>
-    /// Used to search into 
+    /// Reads timestamp-indexed history over inclusive time intervals.
     /// </summary>
     /// <typeparam name="TRecord"></typeparam>
     /// <remarks>
-    /// Constructs new time logger client/reader
+    /// Queries snapshot the number of complete fixed records; a partial trailing fixed record is ignored.
+    /// Physical EOF during the sequential scan stops that scan and returns its prefix. Header-only queries
+    /// do not read payloads; ForEach counts a header before reading its payload, so its returned count can
+    /// exceed callback invocations when a payload is incomplete. Physical EOF during the initial binary
+    /// search propagates. Decoder, action and predicate exceptions always propagate unchanged, including
+    /// EndOfStreamException; they are not treated as physical EOF.
     /// </remarks>
     public sealed class TimeLogClient<TRecord> : IDisposable
     {
@@ -51,6 +56,24 @@ namespace RtTools.Logger
                 : record;
         }
 
+        // Physical record extraction only: no decoder, action or predicate runs inside its caller's EOF catch.
+        private byte[] ReadRecordData(byte[] buffer, long dbin)
+        {
+            if (dbin >= 0)
+            {
+                this.ext.Seek(BinaryPrimitives.ReadInt64LittleEndian(buffer.AsSpan(sizeof(long))), SeekOrigin.Begin);
+                this.ext.ReadExactly(buffer, 0, sizeof(int));
+                byte[] data = new byte[BinaryPrimitives.ReadInt32LittleEndian(buffer)];
+                this.ext.ReadExactly(data, 0, data.Length);
+                return data;
+            }
+
+            int length = buffer[sizeof(long)];
+            byte[] inline = new byte[length];
+            Array.Copy(buffer, sizeof(long) + 1, inline, 0, length);
+            return inline;
+        }
+
         static long BinarySearch(DateTime date, Stream stream, long startRec, long endRec)
         {
             long ldate = date.ToUniversalTime().ToBinary();
@@ -82,6 +105,7 @@ namespace RtTools.Logger
         /// <param name="to"></param>
         /// <param name="action">action to do</param>
         /// <returns>count of records processed</returns>
+        /// <remarks>Counts each matching fixed header, including one whose payload ends prematurely. User exceptions propagate.</remarks>
         public long ForEach(DateTime from, DateTime to, Action<KeyValuePair<DateTime, TRecord>>? action = null)
         {
             to = to.ToUniversalTime();
@@ -99,33 +123,19 @@ namespace RtTools.Logger
 
                 do
                 {
-                    try
-                    { // if end of stream reached - exception
-                        this.main.ReadExactly(buffer, 0, TimeLog<TRecord>.RecordSize);
-                        long dbin = BinaryPrimitives.ReadInt64LittleEndian(buffer);
-                        DateTime time = DateTime.FromBinary(dbin >= 0 ? dbin : -dbin);
-                        if (time > to) break;
-                        ret++;
-                        if (action != null)
-                        {
-                            byte[] data;
-                            if (dbin >= 0)
-                            { // long data - loon into ext
-                                this.ext.Seek(BinaryPrimitives.ReadInt64LittleEndian(buffer.AsSpan(sizeof(long))), SeekOrigin.Begin);
-                                this.ext.ReadExactly(buffer, 0, sizeof(int));
-                                data = new byte[BinaryPrimitives.ReadInt32LittleEndian(buffer)];
-                                this.ext.ReadExactly(data, 0, data.Length);
-                            }
-                            else
-                            { // short data
-                                int dlen = buffer[sizeof(long)];
-                                data = new byte[dlen];
-                                Array.Copy(buffer, sizeof(long) + 1, data, 0, dlen);
-                            }
-                            action(new KeyValuePair<DateTime, TRecord>(time, this.FromBytes(data)));
-                        }
-                    }
+                    try { this.main.ReadExactly(buffer, 0, TimeLog<TRecord>.RecordSize); }
                     catch (EndOfStreamException) { break; }
+                    long dbin = BinaryPrimitives.ReadInt64LittleEndian(buffer);
+                    DateTime time = DateTime.FromBinary(dbin >= 0 ? dbin : -dbin);
+                    if (time > to) break;
+                    ret++;
+                    if (action != null)
+                    {
+                        byte[] data;
+                        try { data = this.ReadRecordData(buffer, dbin); }
+                        catch (EndOfStreamException) { break; }
+                        action(new KeyValuePair<DateTime, TRecord>(time, this.FromBytes(data)));
+                    }
                 } while (++start < count);
             }
             return ret;
@@ -139,6 +149,7 @@ namespace RtTools.Logger
         /// <param name="to"></param>
         /// <param name="predicate">comparer to use</param>
         /// <returns></returns>
+        /// <remarks>Returns fully decoded records before physical EOF. Decoder and predicate exceptions propagate unchanged.</remarks>
         public KeyValuePair<DateTime, TRecord>[] FindAll(DateTime from, DateTime to, Predicate<KeyValuePair<DateTime, TRecord>>? predicate = null)
         {
             lock (this.syncRoot)
@@ -156,6 +167,7 @@ namespace RtTools.Logger
         /// <param name="to">to key</param>
         /// <param name="predicate">comparer to use</param>
         /// <returns>records found</returns>
+        /// <remarks>Without a predicate counts headers without reading payloads; with a predicate counts fully decoded matches. User exceptions propagate.</remarks>
         public long CountAll(DateTime from, DateTime to, Predicate<KeyValuePair<DateTime, TRecord>>? predicate = null)
         {
             lock (this.syncRoot)
@@ -176,6 +188,7 @@ namespace RtTools.Logger
         /// <param name="to">to key</param>
         /// <param name="predicate">comparer to use</param>
         /// <returns>true if exists</returns>
+        /// <remarks>Without a predicate inspects headers only; with a predicate stops at physical payload EOF. User exceptions propagate.</remarks>
         public bool Exists(DateTime from, DateTime to, Predicate<KeyValuePair<DateTime, TRecord>>? predicate = null)
         {
             to = to.ToUniversalTime();
@@ -192,35 +205,18 @@ namespace RtTools.Logger
 
                 do
                 {
-                    try
-                    { // if end of stream reached - exception
-                        this.main.ReadExactly(buffer, 0, TimeLog<TRecord>.RecordSize);
-                        long dbin = BinaryPrimitives.ReadInt64LittleEndian(buffer);
-                        DateTime time = DateTime.FromBinary(dbin >= 0 ? dbin: -dbin);
-                        if (time > to) break;
-
-                        if (predicate == null) // exists
-                            return true;
-
-                        byte[] data;
-                        if (dbin >= 0)
-                        { // long data - loon into ext
-                            this.ext.Seek(BinaryPrimitives.ReadInt64LittleEndian(buffer.AsSpan(sizeof(long))), SeekOrigin.Begin);
-                            this.ext.ReadExactly(buffer, 0, sizeof(int));
-                            data = new byte[BinaryPrimitives.ReadInt32LittleEndian(buffer)];
-                            this.ext.ReadExactly(data, 0, data.Length);
-                        }
-                        else
-                        { // short data
-                            int dlen = buffer[sizeof(long)];
-                            data = new byte[dlen];
-                            Array.Copy(buffer, sizeof(long) + 1, data, 0, dlen);
-                        }
-
-                        if (predicate(new KeyValuePair<DateTime, TRecord>(time, this.FromBytes(data))))
-                            return true;
-                    }
+                    try { this.main.ReadExactly(buffer, 0, TimeLog<TRecord>.RecordSize); }
                     catch (EndOfStreamException) { break; }
+                    long dbin = BinaryPrimitives.ReadInt64LittleEndian(buffer);
+                    DateTime time = DateTime.FromBinary(dbin >= 0 ? dbin : -dbin);
+                    if (time > to) break;
+                    if (predicate == null) return true;
+
+                    byte[] data;
+                    try { data = this.ReadRecordData(buffer, dbin); }
+                    catch (EndOfStreamException) { break; }
+                    if (predicate(new KeyValuePair<DateTime, TRecord>(time, this.FromBytes(data))))
+                        return true;
                 } while (++start < count);
             }
             return false;
