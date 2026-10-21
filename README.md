@@ -85,8 +85,9 @@ engines with explicit codecs, publication boundaries and exact clean-reopen read
 
 Log retains the first publication/storage failure in `WriteError` and rejects
 further operations. Dispose it and inspect the files before reopening. Timer
-diagnostics contain Trace listener exceptions. Mutation or disposal of the same
-Log from one of its query/diagnostic callbacks is rejected to avoid reentry.
+diagnostics contain Trace listener exceptions. Publish, Flush, DeleteAll and
+Dispose are rejected from query/record callbacks. Mutation and disposal of the
+same Log from timer diagnostic callbacks are rejected to avoid reentry.
 
 ## Flush, errors and lifetime
 
