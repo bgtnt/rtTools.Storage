@@ -57,6 +57,8 @@ internal static class ConstructorListenerCleanupChecks
                 var primary = new IOException("file-listener-A");
                 var secondary = new IOException("file-listener-B");
                 Exception? caught = null;
+                int failedNotifications = 0;
+                int secondaryThrows = 0;
                 bool reopened = false;
                 int closes;
                 try
@@ -66,10 +68,12 @@ internal static class ConstructorListenerCleanupChecks
                         using IDisposable owner = Open(synchronized, stream, policy, (state, data) =>
                         {
                             if (SuccessfulOpened(state)) { captured = (DataStorage)data; throw primary; }
-                            if ((state & DataStorage.OpenState.Failed) != 0) throw secondary;
+                            if (InitialFailed(state)) { failedNotifications++; secondaryThrows++; throw secondary; }
                         });
                     }
                     catch (Exception error) { caught = error; }
+                    Check.Equal(1, failedNotifications, "Real-file Failed notification must be invoked exactly once.");
+                    Check.Equal(1, secondaryThrows, "Real-file Failed notification must actually throw B once.");
                     closes = stream.CloseCalls;
                     try { using var exclusive = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None); reopened = true; }
                     catch (IOException) { }
@@ -194,32 +198,43 @@ internal static class ConstructorListenerCleanupChecks
         IDisposable? owner = null;
         bool firstFailed = true;
         bool secondaryThrown = false;
+        int requestedStageInvocations = 0;
+        int secondaryThrowCount = 0;
         try
         {
             void Listener(DataStorage.OpenState state, object data)
             {
                 if (SuccessfulOpened(state) && failOpened) { core = (DataStorage)data; ThrowPrimary(primary); }
-                if ((state & DataStorage.OpenState.Failed) != 0 && firstFailed)
+                if (InitialFailed(state) && firstFailed)
                 {
                     firstFailed = false;
                     if (!failOpened) primary = (Exception)data;
-                    if (stage == "SamePrimary") throw primary;
+                    if (stage == "SamePrimary") { requestedStageInvocations++; secondaryThrowCount++; throw primary; }
                     if (stage == "FailedCatchSource")
                     {
+                        requestedStageInvocations++;
                         stream.FlushError = sourceError;
                         Check.That(core != null, "Opened callback captured the same core.");
                         Check.That(ReferenceEquals(sourceError, Check.Throws<IOException>(core!.Flush, "Failed listener catches actual source failure.")), "Injected source fault identity.");
+                        secondaryThrowCount++;
                         throw secondary;
                     }
-                    if (stage == "Failed") throw secondary;
+                    if (stage == "Failed") { requestedStageInvocations++; secondaryThrowCount++; throw secondary; }
                 }
-                bool isTarget = stage == "Closed" && (state & DataStorage.OpenState.Closed) == DataStorage.OpenState.Closed ||
+                bool isTarget = stage == "Closed" && ClosedNotification(state) ||
                     stage == "Throw" && (state & DataStorage.OpenState.Throw) == DataStorage.OpenState.Throw;
-                if (isTarget && !secondaryThrown) { secondaryThrown = true; throw secondary; }
+                if (isTarget)
+                {
+                    requestedStageInvocations++;
+                    if (!secondaryThrown) { secondaryThrown = true; secondaryThrowCount++; throw secondary; }
+                }
             }
             try { owner = Open(synchronized, stream, policy, Listener); }
             catch (Exception error) { caught = error; }
-            return new(primary, secondary, caught, core, stream.Closes, stream.CanRead && stream.CanWrite, stream.Writes, stream.Resizes, stream.ToArray());
+            var observed = new Observation(primary, secondary, caught, core, stream.Closes, stream.CanRead && stream.CanWrite,
+                stream.Writes, stream.Resizes, stream.ToArray(), stage, requestedStageInvocations, secondaryThrowCount);
+            AssertRequestedNotification(observed);
+            return observed;
         }
         finally
         {
@@ -237,6 +252,12 @@ internal static class ConstructorListenerCleanupChecks
         Check.That(!ReferenceEquals(observed.Primary, observed.Secondary), "A and B are distinct application exceptions.");
         Check.That(observed.Core != null && !observed.Core.IsFaulted && observed.Core.StorageException == null, "Application A/B must not be classified as physical source failures.");
     }
+    private static void AssertRequestedNotification(Observation observed)
+    {
+        int expected = observed.RequestedStage == "None" ? 0 : 1;
+        Check.Equal(expected, observed.RequestedStageInvocations, "Requested " + observed.RequestedStage + " notification invocation count (checked outside listener).");
+        Check.Equal(expected, observed.SecondaryThrowCount, "Requested " + observed.RequestedStage + " notification must actually throw exactly once (None never throws).");
+    }
     private static void AssertClosePolicy(Observation observed, DataStorage.OnException policy)
     {
         bool closing = policy == DataStorage.OnException.Default || (policy & DataStorage.OnException.CloseSource) != 0;
@@ -246,6 +267,10 @@ internal static class ConstructorListenerCleanupChecks
     private static IDisposable Open(bool synchronized, Stream stream, DataStorage.OnException policy, DataStorage.OpenStateDelegate listener) =>
         synchronized ? new SynchronizedDataStorage(stream, onException: policy, listener: listener) : new DataStorage(stream, onException: policy, listener: listener);
     private static bool SuccessfulOpened(DataStorage.OpenState state) => (state & DataStorage.OpenState.Opened) != 0 && (state & DataStorage.OpenState.Failed) == 0;
+    // State flags accumulate: a later Closed/Throw event must not impersonate a
+    // missing Failed notification, nor Throw impersonate a missing Closed event.
+    private static bool InitialFailed(DataStorage.OpenState state) => state == DataStorage.OpenState.Failed || state == (DataStorage.OpenState.Failed | DataStorage.OpenState.Opened);
+    private static bool ClosedNotification(DataStorage.OpenState state) => state == DataStorage.OpenState.Closed || state == (DataStorage.OpenState.Closed | DataStorage.OpenState.Opened);
     private static string Owner(bool synchronized) => synchronized ? "synchronized" : "direct";
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowPrimary(Exception primary) => throw primary;
@@ -267,7 +292,8 @@ internal static class ConstructorListenerCleanupChecks
         return image;
     }
     private sealed record Observation(Exception Primary, Exception Secondary, Exception? Caught, DataStorage? Core,
-        int CloseCalls, bool OpenBeforeFallback, int Writes, int Resizes, byte[] Bytes);
+        int CloseCalls, bool OpenBeforeFallback, int Writes, int Resizes, byte[] Bytes,
+        string RequestedStage, int RequestedStageInvocations, int SecondaryThrowCount);
 
     private sealed class ProbeStream : MemoryStream
     {
