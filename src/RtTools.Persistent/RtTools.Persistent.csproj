@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>rtTools.Storage</AssemblyName>
+    <RootNamespace>RtTools</RootNamespace>
+    <PackageId>rtTools.Storage</PackageId>
+    <Version>0.1.0-preview.1</Version>
+    <Description>Resident persistent state collections and indexed history storage for .NET.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>RtTools contributors</Authors>
+    <RepositoryUrl>https://github.com/bgtnt/rtTools.Storage</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/bgtnt/rtTools.Storage</PackageProjectUrl>
+    <PackageTags>storage;persistence;history;embedded;collections</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../RtTools.History/**/*.cs" Link="History/%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../source-provenance.json" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../CHANGELOG.md" Pack="true" PackagePath="/" />
+    <None Include="../../samples/ResidentState/HistoryLifecycle.cs" Pack="true" PackagePath="samples/ResidentState/" />
+    <None Include="../../samples/ResidentState/ResidentState.csproj" Pack="true" PackagePath="samples/ResidentState/" />
+    <None Include="../../samples/ResidentState/RecordCodec.cs" Pack="true" PackagePath="samples/ResidentState/" />
+    <None Include="../../samples/ResidentState/Program.cs" Pack="true" PackagePath="samples/ResidentState/" />
+  </ItemGroup>
+</Project>

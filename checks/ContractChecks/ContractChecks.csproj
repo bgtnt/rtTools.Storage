@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="rtTools.Storage" Version="[0.1.0-preview.1]" />
+    <Compile Include="../../samples/ResidentState/RecordCodec.cs" Link="RecordCodec.cs" />
+  </ItemGroup>
+</Project>

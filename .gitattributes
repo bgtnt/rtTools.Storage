@@ -1,0 +1,10 @@
+* text=auto
+*.cs text eol=crlf
+*.csproj text eol=lf
+*.props text eol=lf
+*.ps1 text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+# Preserve extracted source bytes for the provenance hashes on every platform.
+src/**/*.cs -text

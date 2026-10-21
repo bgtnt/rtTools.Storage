@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="rtTools.Storage" Version="[0.1.0-preview.1]" />
+    <Compile Include="Program.cs" />
+    <Compile Include="../HistoryAcceptance/CheckContext.cs" Link="Checks/CheckContext.cs" />
+    <Compile Include="../HistoryAcceptance/AcceptanceGateChecks.cs" Link="Checks/AcceptanceGateChecks.cs" />
+    <Compile Include="../HistoryAcceptance/TimeLogChecks.cs" Link="Checks/TimeLogChecks.cs" />
+    <Compile Include="../HistoryAcceptance/TimeLogUtcChecks.cs" Link="Checks/TimeLogUtcChecks.cs" />
+    <Compile Include="../HistoryAcceptance/TimeLogNullChecks.cs" Link="Checks/TimeLogNullChecks.cs" />
+    <Compile Include="../HistoryAcceptance/TimeLogFlushChecks.cs" Link="Checks/TimeLogFlushChecks.cs" />
+    <Compile Include="../HistoryAcceptance/LogChecks.cs" Link="Checks/LogChecks.cs" />
+    <Compile Include="../HistoryAcceptance/ResourceLifetimeChecks.cs" Link="Checks/ResourceLifetimeChecks.cs" />
+  </ItemGroup>
+</Project>
