@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.ComponentModel;
-using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 
 namespace RtTools
 {
@@ -11,6 +11,12 @@ namespace RtTools
     /// Persistent storage wrapper around <see cref="DataStorage"/> with a shared synchronization object
     /// and idle auto-flush support.
     /// </summary>
+    /// <remarks>
+    /// Automatic flush failures are contained and exposed through LastAutoFlushException and the owned storage's
+    /// fault state. A mutation which completed before an inline automatic flush failed still returns its result,
+    /// so callers can publish their record position or resident state. Subsequent storage operations reject the
+    /// faulted owner. Use explicit Flush as an observable checkpoint; automatic telemetry alone is not a health check.
+    /// </remarks>
     public sealed class SynchronizedDataStorage : IDisposable, ICollection<object?>
     {
         /// <summary>
@@ -24,6 +30,21 @@ namespace RtTools
         public object SynchronizationRoot { get; } = new();
         private readonly Timer flushTimer; // timer to manage auto flush
         private int disposed;
+        private int unflushedUpdates;
+        private Exception? lastAutoFlushException;
+
+        /// <summary>The first failure recorded by the owned storage, or null if none has been recorded.</summary>
+        public Exception? StorageException => this.Storage.StorageException;
+
+        /// <summary>Whether the owned storage has entered its terminal faulted state.</summary>
+        public bool IsFaulted => this.Storage.IsFaulted;
+
+        /// <summary>
+        /// The exact failure from the latest completed automatic flush, or null after a successful automatic flush.
+        /// Explicit Flush and Dispose do not change this value. Skipped callbacks do not represent attempts.
+        /// This value is not a health check; use IsFaulted and StorageException to inspect the owned storage.
+        /// </summary>
+        public Exception? LastAutoFlushException => Volatile.Read(ref this.lastAutoFlushException);
 
         /// <summary>
         /// Time in seconds to autoFlush if idle
@@ -58,7 +79,10 @@ namespace RtTools
             get
             {
                 lock (this.SynchronizationRoot)
+                {
+                    this.ThrowIfUnavailable();
                     return this.Storage.Count;
+                }
             }
         }
 
@@ -70,7 +94,10 @@ namespace RtTools
             get
             {
                 lock (this.SynchronizationRoot)
+                {
+                    this.ThrowIfUnavailable();
                     return [.. this.Storage.ReadPositions];
+                }
             }
         }
 
@@ -82,7 +109,10 @@ namespace RtTools
             get
             {
                 lock (this.SynchronizationRoot)
+                {
+                    this.ThrowIfUnavailable();
                     return [.. this.Storage.ReadData];
+                }
             }
         }
 
@@ -94,7 +124,10 @@ namespace RtTools
             get
             {
                 lock (this.SynchronizationRoot)
+                {
+                    this.ThrowIfUnavailable();
                     return [.. this.Storage.ReadObjects];
+                }
             }
         }
 
@@ -135,44 +168,87 @@ namespace RtTools
         /// <param name="storage">data storage to open</param>
         public SynchronizedDataStorage(DataStorage storage)
         {
-            this.flushTimer = new Timer(this.FlushTimerCallback);
+            ArgumentNullException.ThrowIfNull(storage);
             this.Storage = storage;
+            this.flushTimer = new Timer(this.FlushTimerCallback);
         }
 
         internal void FlushNeeded()
         {
-            if (this.FlushIdleMilliseconds == 0 || Interlocked.Increment(ref this.unflushedUpdates) >= this.FlushUpdates)
-                this.FlushTimerCallback(null);
-            else
-                try { this.flushTimer.Change(this.FlushIdleMilliseconds > 0 ? this.FlushIdleMilliseconds : Timeout.Infinite, Timeout.Infinite); }
-                catch (ObjectDisposedException) { } // if timer is disposed - it is OK
+            lock (this.SynchronizationRoot)
+            {
+                if (this.disposed != 0 || this.Storage.IsFaulted) return;
+                this.unflushedUpdates++;
+                if (this.FlushIdleMilliseconds == 0 || this.unflushedUpdates >= this.FlushUpdates)
+                    this.AutoFlush();
+                else
+                    this.flushTimer.Change(this.FlushIdleMilliseconds > 0 ? this.FlushIdleMilliseconds : Timeout.Infinite, Timeout.Infinite);
+            }
         }
-        private int unflushedUpdates = 0;
 
         private void FlushTimerCallback(object? stateInfo)
         {
-            try
+            lock (this.SynchronizationRoot)
             {
-                this.Flush();
-                Interlocked.Exchange(ref this.unflushedUpdates, 0);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
+                if (this.disposed != 0 || this.Storage.IsFaulted) return;
+                this.AutoFlush();
             }
         }
 
+        // Called under the shared gate, which may also be held by a parent collection.
+        // Never throw a post-commit flush failure before that collection publishes its cache or PersistId.
+        private void AutoFlush()
+        {
+            try
+            {
+                this.Storage.Flush();
+                this.unflushedUpdates = 0;
+                Volatile.Write(ref this.lastAutoFlushException, null);
+            }
+            catch (Exception ex)
+            {
+                Volatile.Write(ref this.lastAutoFlushException, ex);
+            }
+        }
+
+        // Callers coordinate entry using SynchronizationRoot, including collection operations which
+        // write through Storage directly and must reject unavailable state before invoking user code.
+        internal void ThrowIfUnavailable()
+        {
+            ObjectDisposedException.ThrowIf(this.disposed != 0, this);
+            this.Storage.ThrowIfUnavailable();
+        }
+
         /// <summary>
-        /// Flush internal stream
+        /// Flushes the internal stream and clears pending-update accounting only on success.
+        /// Failures propagate to the caller; automatic-flush diagnostics remain unchanged.
         /// </summary>
-        public void Flush() { lock (this.SynchronizationRoot) this.Storage.Flush(); }
+        public void Flush()
+        {
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                this.Storage.Flush();
+                this.unflushedUpdates = 0;
+            }
+        }
 
         /// <summary>
         /// Get element at position
         /// </summary>
         /// <param name="pos"></param>
         /// <returns></returns>
-        public object? this[long pos] => this.Storage.FromBytes(this.GetData(pos));
+        public object? this[long pos]
+        {
+            get
+            {
+                lock (this.SynchronizationRoot)
+                {
+                    this.ThrowIfUnavailable();
+                    return this.Storage.FromBytes(this.Storage.GetData(pos));
+                }
+            }
+        }
 
         /// <summary>
         /// Get data at position
@@ -182,7 +258,10 @@ namespace RtTools
         public byte[] GetData(long pos)
         {
             lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
                 return this.Storage.GetData(pos);
+            }
         }
         /// <summary>
         /// add/store new data
@@ -191,15 +270,27 @@ namespace RtTools
         /// <returns>stream position where data was stored</returns>
         public long Add(byte[] data)
         {
-            try { lock (this.SynchronizationRoot) return this.Storage.Add(data); }
-            finally { this.FlushNeeded(); }
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                long position = this.Storage.Add(data);
+                this.FlushNeeded();
+                return position;
+            }
         }
         /// <summary>
         /// add/store new object
         /// </summary>
         /// <param name="obj">object to store</param>
         /// <returns>stream position where object was stored</returns>
-        public long Add(object? obj) => this.Add(this.Storage.ToBytes(obj));
+        public long Add(object? obj)
+        {
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                return this.Add(this.Storage.ToBytes(obj));
+            }
+        }
 
         /// <summary>
         /// update data at position
@@ -209,8 +300,13 @@ namespace RtTools
         /// <returns></returns>
         public long Update(long pos, byte[] data)
         {
-            try { lock (this.SynchronizationRoot) return this.Storage.Update(pos, data); }
-            finally { this.FlushNeeded(); }
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                long position = this.Storage.Update(pos, data);
+                this.FlushNeeded();
+                return position;
+            }
         }
         /// <summary>
         /// Update object at position
@@ -218,7 +314,14 @@ namespace RtTools
         /// <param name="pos">stream position</param>
         /// <param name="obj">object to store</param>
         /// <returns></returns>
-        public long Update(long pos, object? obj) => this.Update(pos, this.Storage.ToBytes(obj));
+        public long Update(long pos, object? obj)
+        {
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                return this.Update(pos, this.Storage.ToBytes(obj));
+            }
+        }
 
         /// <summary>
         /// remove data at position
@@ -227,8 +330,13 @@ namespace RtTools
         /// <returns></returns>
         public long Remove(long pos)
         {
-            try { lock (this.SynchronizationRoot) return this.Storage.Remove(pos); }
-            finally { this.FlushNeeded(); }
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                long position = this.Storage.Remove(pos);
+                this.FlushNeeded();
+                return position;
+            }
         }
 
         /// <summary>
@@ -240,7 +348,10 @@ namespace RtTools
         public T GetHeaderValue<T>(int offset) where T : unmanaged
         {
             lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
                 return this.Storage.GetHeaderValue<T>(offset);
+            }
         }
 
         /// <summary>
@@ -251,8 +362,12 @@ namespace RtTools
         /// <param name="value"></param>
         public void SetHeaderValue<T>(int offset, T value) where T : unmanaged
         {
-            try { lock (this.SynchronizationRoot) this.Storage.SetHeaderValue(offset, value); }
-            finally { this.FlushNeeded(); }
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                this.Storage.SetHeaderValue(offset, value);
+                this.FlushNeeded();
+            }
         }
 
         /// <summary>
@@ -264,8 +379,13 @@ namespace RtTools
         /// <returns></returns>
         public T UpdateHeaderValue<T>(int offset, DataStorage.UpdateStructureDelegate<T> callback) where T : unmanaged
         {
-            try { lock (this.SynchronizationRoot) return this.Storage.UpdateHeaderValue(offset, callback); }
-            finally { this.FlushNeeded(); }
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                T value = this.Storage.UpdateHeaderValue(offset, callback);
+                this.FlushNeeded();
+                return value;
+            }
         }
 
         /// <summary>
@@ -275,22 +395,33 @@ namespace RtTools
         public void CopyTo(Stream destination)
         {
             lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
                 this.Storage.CopyTo(destination);
+            }
         }
 
         #region Dispose / finalize methods
 
         /// <summary>
-        /// Disposes storage resources
+        /// Stops automatic flushing and attempts to dispose the owned storage, even if it is faulted.
+        /// Does not wait for timer callbacks; queued callbacks inspect disposed state under the shared gate.
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref this.disposed, 1) != 0)
-                return;
-
-            this.flushTimer.DisposeAsync().AsTask().GetAwaiter().GetResult();
             lock (this.SynchronizationRoot)
-                this.Storage.Dispose();
+            {
+                if (this.disposed != 0) return;
+                this.Storage.ThrowIfInIoCallback();
+                this.disposed = 1;
+                List<Exception>? failures = null;
+                try { this.flushTimer.Dispose(); }
+                catch (Exception error) { (failures ??= []).Add(error); }
+                try { this.Storage.Dispose(); }
+                catch (Exception error) { (failures ??= []).Add(error); }
+                if (failures?.Count == 1) ExceptionDispatchInfo.Capture(failures[0]).Throw();
+                if (failures?.Count > 1) throw new AggregateException("Synchronized storage disposal failed.", failures);
+            }
         }
 
         #endregion
@@ -302,8 +433,16 @@ namespace RtTools
         public IEnumerator<object?> GetEnumerator()
         {
             lock (this.SynchronizationRoot)
-                foreach (KeyValuePair<long, object?> item in this.Storage.ReadObjects)
-                    yield return item.Value;
+            {
+                this.ThrowIfUnavailable();
+                using IEnumerator<KeyValuePair<long, object?>> items = this.Storage.ReadObjects.GetEnumerator();
+                while (true)
+                {
+                    this.ThrowIfUnavailable();
+                    if (!items.MoveNext()) yield break;
+                    yield return items.Current.Value;
+                }
+            }
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => this.GetEnumerator();
@@ -317,8 +456,12 @@ namespace RtTools
         /// </summary>
         public void Clear()
         {
-            try { lock (this.SynchronizationRoot) this.Storage.Clear(); }
-            finally { this.FlushNeeded(); }
+            lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
+                this.Storage.Clear();
+                this.FlushNeeded();
+            }
         }
 
         /// <summary>
@@ -329,9 +472,12 @@ namespace RtTools
         public bool Contains(object? item)
         {
             lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
                 foreach (KeyValuePair<long, object?> data in this.Storage.ReadObjects)
                     if (object.Equals(item, data.Value))
                         return true;
+            }
             return false;
         }
 
@@ -343,8 +489,11 @@ namespace RtTools
         public void CopyTo(object?[] array, int arrayIndex)
         {
             lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
                 foreach (KeyValuePair<long, object?> data in this.Storage.ReadObjects)
                     array[arrayIndex++] = data.Value;
+            }
         }
 
         bool ICollection<object?>.IsReadOnly => false;
@@ -352,12 +501,15 @@ namespace RtTools
         bool ICollection<object?>.Remove(object? item)
         {
             lock (this.SynchronizationRoot)
+            {
+                this.ThrowIfUnavailable();
                 foreach (KeyValuePair<long, object?> data in this.Storage.ReadObjects)
                     if (object.Equals(item, data.Value))
                     {
                         this.Remove(data.Key);
                         return true;
                     }
+            }
             return false;
         }
 

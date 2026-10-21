@@ -3,7 +3,7 @@
 Embedded .NET storage for application state and indexed history. One BCL-only
 package targets .NET 10 with no external runtime dependencies.
 
-Current preview: `0.1.0-preview.3`. APIs and file formats may change before a stable
+Current preview: `0.1.0-preview.4`. APIs and file formats may change before a stable
 release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 | Need | Type | Model |
@@ -17,12 +17,12 @@ release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 ## Install
 
-Download `rtTools.Storage.0.1.0-preview.3.nupkg` from the
-[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.3)
+Download `rtTools.Storage.0.1.0-preview.4.nupkg` from the
+[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.4)
 into a local `packages` directory, then run:
 
 ```sh
-dotnet add package rtTools.Storage --version 0.1.0-preview.3 --source ./packages
+dotnet add package rtTools.Storage --version 0.1.0-preview.4 --source ./packages
 ```
 
 Packages are distributed through GitHub Releases. This release does not require
@@ -71,10 +71,10 @@ create a store on their own.
 
 | Public types | Construction and principal operations | Ownership, codecs and limits |
 | --- | --- | --- |
-| [DataStorage](src/RtTools.Persistent/DataStorage.cs) | Seekable stream, scan callbacks, header size, serializer and error policy. Add, Update, Remove, GetData, object indexer, ReadPositions/ReadData/ReadObjects, Clear, CopyTo, Flush; Get/Set/UpdateHeaderValue and ClearHeader. | Base record allocator and reusable-space engine. Owns its stream once initialized; direct access needs caller synchronization. Update may relocate a record: use its returned position. |
+| [DataStorage](src/RtTools.Persistent/DataStorage.cs) | Seekable stream, scan callbacks, header size, serializer and error policy. Add, Update, Remove, GetData, object indexer, ReadPositions/ReadData/ReadObjects, Clear, CopyTo, Flush; header operations, IsFaulted and StorageException. | Base record allocator. Update may relocate a record: use its returned position. First storage failure is sticky; later storage operations reject. Cached metadata remains advisory. Owns its stream; direct access needs caller coordination. |
 | DataStorage.DataScan, ObjectScan, OpenStateDelegate, UpdateStructureDelegate&lt;T&gt; | Byte/object scanning, open-state notifications and header update callbacks. | Initial scan callbacks run during construction, under the selected error policy. |
 | [DataStorage.DataSourceException, OnException, OpenState](src/RtTools.Persistent/DataStorage%2Brecover.cs) | Storage-format errors, open/recovery policies and reported states. | Default resolves to CloseAndThrow. Explicit Clear policies may erase data; recovery controls do not establish crash durability. |
-| [SynchronizedDataStorage](src/RtTools.Persistent/SynchronizedDataStorage.cs) | File/stream constructors or wrap DataStorage; locked record/header operations and reads, SynchronizationRoot, FlushUpdates, FlushIdleMilliseconds/Seconds. | Owns the wrapped store. Defaults: flush after 256 updates or 1000 ms idle. Explicit Flush is an observable checkpoint; its background errors differ from TimeLog's LastAutoFlushException. |
+| [SynchronizedDataStorage](src/RtTools.Persistent/SynchronizedDataStorage.cs) | File/stream or DataStorage; locked record/header operations and reads, SynchronizationRoot, FlushUpdates, FlushIdleMilliseconds/Seconds, LastAutoFlushException, IsFaulted and StorageException. | Owns the wrapped store. Defaults: automatic flush after 256 updates or 1000 ms idle. Automatic failures are observable and contained; the core then rejects further storage operations. Explicit Flush propagates errors. |
 | [DictionaryPersistent&lt;TKey,TValue&gt;](src/RtTools.Persistent/DictionaryPersistent%602.cs) | File/stream, optional paired key/value reader/writer; IDictionary operations and Storage. | Complete resident dictionary; setters serialize. Property mutation alone is not saved. |
 | [ListPersistent&lt;T&gt;](src/RtTools.Persistent/ListPersistent%601.cs) | File/stream, optional paired reader/writer; IList operations and Storage. | Complete resident ordered list; finite order labels can be exhausted. |
 | [IPersistent](src/RtTools.Persistent/IPersistent.cs), [IPersistentBinary](src/RtTools.Persistent/IPersistentBinary.cs) | PersistId and IsPersistent; binary variant adds ToBinary(). | Unpersisted/removed ID is long.MinValue. IDs are physical, relocatable and store-local; no cross-store validation is implied. |
@@ -209,6 +209,69 @@ same Log from timer diagnostic callbacks are rejected to avoid reentry.
 
 ## Flush, errors and lifetime
 
+### State storage failure contract
+
+DataStorage exposes `StorageException`, the first failure that made this instance
+unsafe to continue, and `IsFaulted`. The failing operation propagates its original
+exception. Later storage reads, mutations, header operations and Flush throw
+InvalidOperationException with that first exception as InnerException before
+performing more source I/O. There is no reset/retry on the same instance. Dispose
+the owning collection/store, inspect the files, then explicitly open a new instance
+with the intended validation/recovery policy.
+
+| Failure boundary | Result |
+| --- | --- |
+| Exception from an owned-source stream operation, or unexpected EOF while reading required bytes | Latches the first storage failure. Normal partial reads and CopyTo's end-of-source are valid. |
+| Exception after a core mutation may already have changed bytes or allocator state | Latches failure; partial changes are not rolled back. |
+| Argument/bounds/format rejection before mutation, or an application codec/header callback exception | Propagates without itself faulting storage. A callback that performs failing storage I/O still faults that store. |
+| CopyTo destination failure | Propagates without faulting the source; the source position may have advanced. |
+
+Physical source failures during construction abort and attempt cleanup even when
+Recover/Clear was selected. Format-based open policies retain their documented
+behavior. `IsFaulted == false` is not a certificate of file integrity. Direct
+access through the original public `Stream` bypasses tracking and can invalidate
+the allocator; coordinate such access yourself.
+
+Count, FirstPosition, LastPosition and Version on the raw DataStorage remain
+readable diagnostic snapshots. Dictionary/List cached values, previously returned
+arrays/enumerators, queue BufferedCount and application-held PersistId values can
+also remain readable. They do not establish what reached persistent storage after
+a failure. Discard the owning wrapper after its Storage.IsFaulted becomes true;
+this contract does not promise that every cached read throws. DictionaryLogger
+rejects wrapper operations on faulted current state and rechecks before appending
+a snapshot; its directly exposed Log is a separate resource.
+
+SynchronizedDataStorage's `LastAutoFlushException` reports the latest completed
+automatic flush attempt, including an update-threshold or zero-idle attempt on the
+calling thread. Inspect/poll it at application checkpoints; `StorageException`
+and `IsFaulted` report the sticky storage failure. Initially the auto property is
+null, and successful automatic attempts leave it null. Explicit Flush, Dispose
+and skipped callbacks do not change it. Null alone does not mean storage is healthy.
+After a failure no automatic retry occurs on that instance.
+
+An automatic flush failure is contained after a mutation completed: Add/Update/
+Remove can still return their result and finish publishing the resident cache or
+PersistId. This is a completed mutation, not a successful flush checkpoint. Both
+failure properties are observable before an inline attempt returns. A later batch
+step can fail because storage is now faulted, retaining only the completed prefix.
+Rejected calls with no completed mutation do not request automatic flushing. A
+batch can request a flush for its completed prefix even when a later application
+callback fails; an automatic failure still cannot replace that callback error.
+Pending-update accounting is changed under SynchronizationRoot, cleared after a
+successful flush and retained on failure. Negative FlushIdleMilliseconds disables
+the idle timer; the update threshold still applies. Zero requests immediate flush.
+
+Dispose remains available after failure and attempts resource cleanup once. A
+cleanup exception can propagate without replacing the first StorageException.
+SynchronizedDataStorage stops its timer without waiting under a recursively held
+storage gate; queued callbacks check disposal before touching streams. Normal
+storage operations after disposal throw ObjectDisposedException. Diagnostic
+properties remain readable. Synchronous source-stream callback reentry during
+Read/Write/Flush or disposal is rejected before a new storage operation or disposal
+transition. This does not prevent arbitrary application-created cross-thread lock cycles.
+
+### History storage
+
 TimeLog explicit Flush attempts both files. One failure is rethrown as the
 original exception; multiple failures produce AggregateException. Success means
 the managed flush attempts completed, without an atomic two-file commit or
@@ -259,6 +322,9 @@ layouts, tombstones and clean reopen. Object-persistence, bounded-queue and
 dictionary-snapshot suites test the new APIs through the package as well.
 Additional regressions cover application exceptions versus physical EOF,
 collection constructor ownership/validation and malformed DataStorage bounds.
+State-storage regressions also exercise first-failure capture, partial writes,
+post-mutation errors, automatic/explicit flush, callback reentry, pending counts
+and cleanup with synthetic streams and bounded timer synchronization.
 The UTC regression requires a nonzero local
 timezone offset; CI uses Europe/Sofia (Windows: FLE Standard Time).
 
@@ -271,6 +337,7 @@ on workload and codecs; no universal speed claim is made.
 [MIT](LICENSE), copyright RtTools contributors. The selected code is extracted
 from the owner's RtTools source; [provenance](source-provenance.json) records
 relative origin paths, original/current hashes, helper spans and corrections.
+AuthoredFiles identifies new library implementation separately from extracted code.
 Original import history includes the contributor identity `himchev`; attribution
 does not imply exclusive authorship. Unrelated RtTools helpers
 and application-specific consumers are outside this package.

@@ -38,6 +38,7 @@ public class StreamPersistence : IDisposable
         DataStorage.OpenStateDelegate? listener = null, Action<IPersistent>? onLoad = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
+        var sourceCleanup = new DataStorage.SourceCleanup(false);
         try
         {
             void Scan(long position, object? value)
@@ -49,13 +50,16 @@ public class StreamPersistence : IDisposable
                     onLoad?.Invoke(persistent);
                 }
             }
-            this.Storage = new SynchronizedDataStorage(new DataStorage(stream, null, Scan, headerSize,
+            this.Storage = new SynchronizedDataStorage(new DataStorage(sourceCleanup, stream, null, Scan, headerSize,
                 minDataChunk, moveFactor, minUnusedTruncate, serializer, onException, listener));
         }
         catch (Exception error)
         {
-            try { stream.Dispose(); }
-            catch (Exception cleanupError) { throw new AggregateException("Stream persistence initialization and cleanup failed.", error, cleanupError); }
+            if (sourceCleanup.TryBeginClose())
+            {
+                try { stream.Dispose(); }
+                catch (Exception cleanupError) { throw new AggregateException("Stream persistence initialization and cleanup failed.", error, cleanupError); }
+            }
             throw;
         }
     }
@@ -78,7 +82,9 @@ public class StreamPersistence : IDisposable
             this.BeginOperation();
             try
             {
-                return persistent.PersistId = persistent.IsPersistent
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                return persistent.PersistId = isPersistent
                     ? this.Storage.Update(persistent.PersistId, persistent) : this.Storage.Add(persistent);
             }
             finally { this.operationActive = false; }
@@ -94,7 +100,9 @@ public class StreamPersistence : IDisposable
             this.BeginOperation();
             try
             {
-                if (persistent.IsPersistent) throw new ArgumentException("Object is already persisted.", nameof(persistent));
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                if (isPersistent) throw new ArgumentException("Object is already persisted.", nameof(persistent));
                 return persistent.PersistId = this.Storage.Add(persistent);
             }
             finally { this.operationActive = false; }
@@ -110,7 +118,9 @@ public class StreamPersistence : IDisposable
             this.BeginOperation();
             try
             {
-                if (!persistent.IsPersistent) throw new ArgumentException("Object must be persisted before update.", nameof(persistent));
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                if (!isPersistent) throw new ArgumentException("Object must be persisted before update.", nameof(persistent));
                 return persistent.PersistId = this.Storage.Update(persistent.PersistId, persistent);
             }
             finally { this.operationActive = false; }
@@ -126,7 +136,9 @@ public class StreamPersistence : IDisposable
             this.BeginOperation();
             try
             {
-                if (!persistent.IsPersistent) return false;
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                if (!isPersistent) return false;
                 persistent.PersistId = this.Storage.Remove(persistent.PersistId);
                 return true;
             }
@@ -137,6 +149,7 @@ public class StreamPersistence : IDisposable
     private void BeginOperation()
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);
+        this.Storage.ThrowIfUnavailable();
         if (this.operationActive) throw new InvalidOperationException("Persistence callbacks cannot reenter mutations of the same wrapper.");
         this.operationActive = true;
     }

@@ -26,3 +26,6 @@ checks/HistoryAcceptance/*
 !checks/HistoryAcceptance/TimeLogClientExceptionChecks.cs
 !checks/HistoryAcceptance/CollectionLifetimeChecks.cs
 !checks/HistoryAcceptance/DataStorageBoundsChecks.cs
+!checks/HistoryAcceptance/DataStorageFailureChecks.cs
+!checks/HistoryAcceptance/SynchronizedStorageFailureChecks.cs
+!checks/HistoryAcceptance/WrapperStorageFailureChecks.cs

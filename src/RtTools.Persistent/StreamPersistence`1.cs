@@ -49,6 +49,7 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
     {
         ArgumentNullException.ThrowIfNull(stream);
         this.persistentFactory = persistentFactory ?? throw new ArgumentNullException(nameof(persistentFactory));
+        var sourceCleanup = new DataStorage.SourceCleanup(false);
         try
         {
             void Scan(long position, byte[] data)
@@ -58,13 +59,16 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
                 persistent.PersistId = position;
                 onLoad?.Invoke(persistent);
             }
-            this.Storage = new SynchronizedDataStorage(new DataStorage(stream, Scan, null, headerSize,
+            this.Storage = new SynchronizedDataStorage(new DataStorage(sourceCleanup, stream, Scan, null, headerSize,
                 minDataChunk, moveFactor, minUnusedTruncate, serializer, onException, listener));
         }
         catch (Exception error)
         {
-            try { stream.Dispose(); }
-            catch (Exception cleanupError) { throw new AggregateException("Stream persistence initialization and cleanup failed.", error, cleanupError); }
+            if (sourceCleanup.TryBeginClose())
+            {
+                try { stream.Dispose(); }
+                catch (Exception cleanupError) { throw new AggregateException("Stream persistence initialization and cleanup failed.", error, cleanupError); }
+            }
             throw;
         }
     }
@@ -110,7 +114,10 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
             try
             {
                 byte[] data = Payload(persistent);
-                return persistent.PersistId = persistent.IsPersistent
+                this.Storage.ThrowIfUnavailable();
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                return persistent.PersistId = isPersistent
                     ? this.Storage.Update(persistent.PersistId, data) : this.Storage.Add(data);
             }
             finally { this.operationActive = false; }
@@ -126,7 +133,9 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
             this.BeginOperation();
             try
             {
-                if (persistent.IsPersistent) throw new ArgumentException("Object is already persisted.", nameof(persistent));
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                if (isPersistent) throw new ArgumentException("Object is already persisted.", nameof(persistent));
                 return persistent.PersistId = this.Storage.Add(Payload(persistent));
             }
             finally { this.operationActive = false; }
@@ -142,7 +151,9 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
             this.BeginOperation();
             try
             {
-                if (!persistent.IsPersistent) throw new ArgumentException("Object must be persisted before update.", nameof(persistent));
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                if (!isPersistent) throw new ArgumentException("Object must be persisted before update.", nameof(persistent));
                 return persistent.PersistId = this.Storage.Update(persistent.PersistId, Payload(persistent));
             }
             finally { this.operationActive = false; }
@@ -158,7 +169,9 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
             this.BeginOperation();
             try
             {
-                if (!persistent.IsPersistent) return false;
+                bool isPersistent = persistent.IsPersistent;
+                this.Storage.ThrowIfUnavailable();
+                if (!isPersistent) return false;
                 persistent.PersistId = this.Storage.Remove(persistent.PersistId);
                 return true;
             }
@@ -169,6 +182,7 @@ public class StreamPersistence<T> : IDisposable where T : class, IPersistentBina
     private void BeginOperation()
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);
+        this.Storage.ThrowIfUnavailable();
         if (this.operationActive) throw new InvalidOperationException("Persistence callbacks cannot reenter mutations of the same wrapper.");
         this.operationActive = true;
     }

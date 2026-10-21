@@ -32,7 +32,7 @@ try {
     Invoke-VerificationStep 'library-restore' @('restore', $library, '--artifacts-path', $buildArtifacts, '--packages', $packages, '--configfile', $config)
     Invoke-VerificationStep 'library-build' @('build', $library, '--no-restore', '--configuration', 'Release', '--artifacts-path', $buildArtifacts, '/p:UseSharedCompilation=false')
     Invoke-VerificationStep 'library-pack' @('pack', $library, '--no-build', '--no-restore', '--configuration', 'Release', '--artifacts-path', $buildArtifacts, '--output', $feed)
-    $packagePath = Join-Path $feed 'rtTools.Storage.0.1.0-preview.3.nupkg'
+    $packagePath = Join-Path $feed 'rtTools.Storage.0.1.0-preview.4.nupkg'
     $packageItem = Get-Item -LiteralPath $packagePath
     $package = [pscustomobject]@{ Path=$packageItem.FullName; Bytes=$packageItem.Length; Sha256=(Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash }
 
@@ -48,7 +48,7 @@ try {
     }
     $history = Get-Content -LiteralPath $historyReport -Raw | ConvertFrom-Json
     if ($history.Status -ne 'PASS' -or $history.Mode -ne 'package-history-contracts') { throw 'The package History report did not pass or has the wrong mode.' }
-    $requiredSuites = @('acceptance-gate', 'timelog', 'timelog-utc', 'timelog-null', 'log', 'timelog-flush', 'resource-lifetime', 'stream-persistence', 'buffered-queue', 'dictionary-logger', 'timelog-client-errors', 'collection-lifetime', 'storage-bounds')
+    $requiredSuites = @('acceptance-gate', 'timelog', 'timelog-utc', 'timelog-null', 'log', 'timelog-flush', 'resource-lifetime', 'stream-persistence', 'buffered-queue', 'dictionary-logger', 'timelog-client-errors', 'collection-lifetime', 'storage-bounds', 'storage-failures', 'synchronized-storage-failures', 'wrapper-storage-failures')
     $completedSuites = @($history.CompletedSuites | Where-Object { $null -ne $_ })
     if ($completedSuites.Count -ne $requiredSuites.Count -or @($requiredSuites | Where-Object { $_ -notin $completedSuites }).Count -ne 0) {
         throw 'The package History report is incomplete: a required suite completion is missing.'

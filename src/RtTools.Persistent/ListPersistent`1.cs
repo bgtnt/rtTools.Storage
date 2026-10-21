@@ -122,10 +122,11 @@ namespace RtTools
             ValidateCodecPair(itemReader, itemWriter);
             this.itemReader = itemReader;
             this.itemWriter = itemWriter;
+            var sourceCleanup = new DataStorage.SourceCleanup(false);
             try
             {
                 this.records = [];
-                DataStorage storage = new(stream, (pos, data) => this.records.Add(this.FromBytes(data, pos)), null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
+                DataStorage storage = new(sourceCleanup, stream, (pos, data) => this.records.Add(this.FromBytes(data, pos)), null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
                     listener: (state, data) =>
                     {
                         if (state == DataStorage.OpenState.Recovered ||
@@ -147,8 +148,11 @@ namespace RtTools
             }
             catch
             {
-                try { stream.Dispose(); }
-                catch { } // Preserve the initialization failure after attempting to release the owned stream.
+                if (sourceCleanup.TryBeginClose())
+                {
+                    try { stream.Dispose(); }
+                    catch { } // Preserve the initialization failure after attempting to release the owned stream.
+                }
                 throw;
             }
         }
@@ -175,12 +179,14 @@ namespace RtTools
         {
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 this.ThrowIfInsertingRange();
                 int count = this.records.Count;
                 ListItem? previous = count == 0 ? null : this.records[count - 1];
                 SortIndex index = this.GetInsertionIndex(count);
                 ListItem li = new(index, item);
                 byte[] data = this.ToBytes(li);
+                this.Storage.ThrowIfUnavailable();
                 this.CheckInsertionPoint(count, count, previous, null);
                 li.PersistId = this.Storage.Storage.Add(data);
                 this.records.Add(li);
@@ -232,6 +238,7 @@ namespace RtTools
         private void insertRange(int index, IEnumerable<T> items)
         {
             ArgumentNullException.ThrowIfNull(items);
+            this.Storage.ThrowIfUnavailable();
             this.ThrowIfInsertingRange();
             this.insertingRange = true;
             try
@@ -241,6 +248,7 @@ namespace RtTools
                     throw new ArgumentOutOfRangeException(nameof(index));
 
                 List<T> snapshot = new(items);
+                this.Storage.ThrowIfUnavailable();
                 int itemsCount = snapshot.Count;
                 if (itemsCount == 0)
                     return;
@@ -255,6 +263,7 @@ namespace RtTools
                 {
                     foreach (T item in snapshot)
                     {
+                        this.Storage.ThrowIfUnavailable();
                         ListItem li = new(indices[prepared.Count], item);
                         li.PersistId = this.Storage.Storage.Add(this.ToBytes(li));
                         prepared.Add(li);
@@ -408,6 +417,7 @@ namespace RtTools
 
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 this.ThrowIfInsertingRange();
                 int count = this.records.Count;
                 if (index > count)
@@ -417,6 +427,7 @@ namespace RtTools
                 ListItem? next = index == count ? null : this.records[index];
                 ListItem li = new(this.GetInsertionIndex(index), item);
                 byte[] data = this.ToBytes(li);
+                this.Storage.ThrowIfUnavailable();
                 this.CheckInsertionPoint(index, count, previous, next);
                 li.PersistId = this.Storage.Storage.Add(data);
                 this.records.Insert(index, li);
@@ -433,8 +444,10 @@ namespace RtTools
         {
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 this.ThrowIfInsertingRange();
                 int index = this.IndexOf(item);
+                this.Storage.ThrowIfUnavailable();
 
                 if (index < 0) // not found
                     return false;
@@ -457,6 +470,7 @@ namespace RtTools
 
             lock (this.Storage.SynchronizationRoot)
             { // index is OK
+                this.Storage.ThrowIfUnavailable();
                 this.ThrowIfInsertingRange();
                 if (index >= this.records.Count)
                     throw new ArgumentOutOfRangeException(nameof(index));
@@ -630,11 +644,13 @@ namespace RtTools
 
                 lock (this.Storage.SynchronizationRoot)
                 {
+                    this.Storage.ThrowIfUnavailable();
                     this.ThrowIfInsertingRange();
                     if (index >= this.records.Count)
                         throw new ArgumentOutOfRangeException(nameof(index));
                     ListItem li = this.records[index];
                     byte[] data = this.ToBytes(new ListItem(li.Index, value));
+                    this.Storage.ThrowIfUnavailable();
                     if (index >= this.records.Count || !ReferenceEquals(this.records[index], li))
                         throw new InvalidOperationException("The list item changed while preparing its persistent value.");
                     long persistId = this.Storage.Storage.Update(li.PersistId, data);
@@ -652,6 +668,7 @@ namespace RtTools
         {
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 this.ThrowIfInsertingRange();
                 this.Storage.Clear();
                 this.records.Clear();

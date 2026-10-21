@@ -1,5 +1,24 @@
 # Release notes
 
+## 0.1.0-preview.4 — 2026-10-21
+
+- DataStorage exposes its first StorageException and IsFaulted. A source-stream
+  failure or failure after a possible core mutation makes the instance unusable
+  for further storage operations; disposal and advisory metadata remain available.
+- SynchronizedDataStorage exposes LastAutoFlushException and forwards storage
+  fault state. Automatic failures are contained, pending changes remain pending,
+  and an already completed mutation still returns its result before fail-stop.
+- Pending-update accounting and timer shutdown share the storage gate; rejected
+  calls without completed changes do not trigger a flush that could mask their error.
+- Mutation entry guards distinguish application codec/callback exceptions from
+  storage failures. Dictionary snapshots reject a faulted current-state store.
+- New package-only synthetic failure regressions cover automatic/explicit flush,
+  partial writes, truncation, post-mutation failures, reentry and disposal.
+
+Record layouts and runtime dependencies are unchanged. Faulted owners must be
+disposed; reopening and validating files is a separate action, with no rollback,
+automatic repair or crash/power-loss durability guarantee.
+
 ## 0.1.0-preview.3 — 2026-10-21
 
 Corrects three storage/error-path defects without changing public APIs, record

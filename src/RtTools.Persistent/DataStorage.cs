@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
+using System.Threading;
 
 namespace RtTools
 {
@@ -53,7 +55,8 @@ namespace RtTools
         private readonly double moveFactor = 0.9;
 
         /// <summary>
-        /// Internal stream used
+        /// Original owned stream. Direct access bypasses failure tracking and can invalidate
+        /// allocator metadata and resident caches; coordinate access with the owning wrapper.
         /// </summary>
         public Stream Stream { get; private set; }
 
@@ -79,6 +82,7 @@ namespace RtTools
         {
             get
             {
+                this.ThrowIfUnavailable();
                 RecordHeader header = new();
                 byte[] buffer = new byte[RecordHeader.HeaderSize];
                 long pos = this.FirstPosition;
@@ -86,6 +90,7 @@ namespace RtTools
                 {
                     header = this.ReadRecordHeader(pos, buffer);
                     yield return pos;
+                    this.ThrowIfUnavailable();
                     pos = header.Next;
                 }
             }
@@ -98,6 +103,7 @@ namespace RtTools
         {
             get
             {
+                this.ThrowIfUnavailable();
                 RecordHeader header = new();
                 byte[] buffer = new byte[RecordHeader.HeaderSize];
                 long pos = this.FirstPosition;
@@ -106,8 +112,9 @@ namespace RtTools
                     header = this.ReadRecordHeader(pos, buffer);
 
                     byte[] data = new byte[header.DataLength];
-                    ReadExactly(this.Stream, data, header.DataLength);
+                    ReadExactly(this.ioStream, data, header.DataLength);
                     yield return new KeyValuePair<long, byte[]>(pos, data);
+                    this.ThrowIfUnavailable();
 
                     pos = header.Next;
                 }
@@ -121,8 +128,14 @@ namespace RtTools
         {
             get
             {
+                this.ThrowIfUnavailable();
                 foreach (KeyValuePair<long, byte[]> data in this.ReadData)
-                    yield return new KeyValuePair<long, object?>(data.Key, this.FromBytes(data.Value));
+                {
+                    this.ThrowIfUnavailable();
+                    object? value = this.FromBytes(data.Value);
+                    this.ThrowIfUnavailable();
+                    yield return new KeyValuePair<long, object?>(data.Key, value);
+                }
             }
         }
 
@@ -151,7 +164,7 @@ namespace RtTools
             {
                 int read = stream.Read(buffer, offset, count);
                 if (read <= 0)
-                    throw new DataSourceException("unexpected end of stream");
+                    UnexpectedEnd(stream);
 
                 offset += read;
                 count -= read;
@@ -164,7 +177,7 @@ namespace RtTools
             {
                 int read = stream.Read(buffer);
                 if (read <= 0)
-                    throw new DataSourceException("unexpected end of stream");
+                    UnexpectedEnd(stream);
 
                 buffer = buffer[read..];
             }
@@ -172,10 +185,11 @@ namespace RtTools
 
         private RecordHeader ReadRecordHeader(long position, Span<byte> buffer)
         {
-            long streamLength = this.Stream.Length;
+            this.ThrowIfUnavailable();
+            long streamLength = this.ioStream.Length;
             if (position < this.DataOffset || position > streamLength - RecordHeader.HeaderSize)
                 throw new DataSourceException("record header is outside the stream at " + position);
-            RecordHeader header = new(this.Stream, position, buffer);
+            RecordHeader header = new(this.ioStream, position, buffer);
             header.ValidateBounds(streamLength);
             return header;
         }
@@ -203,13 +217,14 @@ namespace RtTools
         /// <returns></returns>
         public T GetHeaderValue<T>(int offset) where T : unmanaged
         {
+            this.ThrowIfUnavailable();
             int len = Unsafe.SizeOf<T>();
             if (offset < HeaderOffset || offset > (this.DataOffset - len))
                 throw new DataSourceException(offset + " is not between 12 and " + (this.DataOffset - len));
             Span<byte> buffer = len <= 256 ? stackalloc byte[len] : new byte[len];
             // read from file as byte[]
-            this.Stream.Seek(offset, SeekOrigin.Begin);
-            ReadExactly(this.Stream, buffer);
+            this.ioStream.Seek(offset, SeekOrigin.Begin);
+            ReadExactly(this.ioStream, buffer);
 
             return MemoryMarshal.Read<T>(buffer);
         }
@@ -222,6 +237,7 @@ namespace RtTools
         /// <param name="value"></param>
         public void SetHeaderValue<T>(int offset, T value) where T : unmanaged
         {
+            this.ThrowIfUnavailable();
             int len = Unsafe.SizeOf<T>();
             if (offset < HeaderOffset || offset > (this.DataOffset - len))
                 throw new DataSourceException(offset + " is not between 12 and " + (this.DataOffset - len));
@@ -230,8 +246,8 @@ namespace RtTools
             MemoryMarshal.Write(buffer, in value);
 
             // write data into stream
-            this.Stream.Seek(offset, SeekOrigin.Begin);
-            this.Stream.Write(buffer);
+            this.ioStream.Seek(offset, SeekOrigin.Begin);
+            this.ioStream.Write(buffer);
         }
 
         /// <summary>
@@ -258,6 +274,7 @@ namespace RtTools
         /// <returns>callback result over data read</returns>
         public T UpdateHeaderValue<T>(int offset, UpdateStructureDelegate<T> callback) where T : unmanaged
         {
+            this.ThrowIfUnavailable();
             int len = Unsafe.SizeOf<T>();
             if (offset < HeaderOffset || offset > (this.DataOffset - len))
                 throw new DataSourceException("offset should be between 12 and " + (this.DataOffset - len));
@@ -265,14 +282,15 @@ namespace RtTools
             Span<byte> buffer = len <= 256 ? stackalloc byte[len] : new byte[len];
 
             // read from file as byte[]
-            this.Stream.Seek(offset, SeekOrigin.Begin);
-            ReadExactly(this.Stream, buffer);
+            this.ioStream.Seek(offset, SeekOrigin.Begin);
+            ReadExactly(this.ioStream, buffer);
             T value = callback(MemoryMarshal.Read<T>(buffer));
+            this.ThrowIfUnavailable();
             MemoryMarshal.Write(buffer, in value);
 
             // write data into stream
-            this.Stream.Seek(offset, SeekOrigin.Begin);
-            this.Stream.Write(buffer);
+            this.ioStream.Seek(offset, SeekOrigin.Begin);
+            this.ioStream.Write(buffer);
 
             return value;
         }
@@ -349,194 +367,250 @@ namespace RtTools
             IDataSerializer? serializer = null,
             OnException onException = OnException.Default,
             OpenStateDelegate? listener = null)
+            : this(new SourceCleanup(true), stream, scanBytesCallback, scanObjectsCallback, headerSize, minDataChunk,
+                  moveFactorPercent, minUnusedTruncate, serializer, onException, listener) { }
+
+        // Owning wrappers with their own construction catch delegate physical-failure
+        // cleanup to that catch, avoiding a second close on a caller-supplied stream.
+        internal DataStorage(SourceCleanup sourceCleanup, Stream stream,
+            DataScan? scanBytesCallback = null,
+            ObjectScan? scanObjectsCallback = null,
+            ushort headerSize = 0,
+            int minDataChunk = 256,
+            byte moveFactorPercent = 90,
+            uint minUnusedTruncate = 1000000,
+            IDataSerializer? serializer = null,
+            OnException onException = OnException.Default,
+            OpenStateDelegate? listener = null)
         {
             OpenState state = OpenState.Default;
 
+            ArgumentNullException.ThrowIfNull(sourceCleanup);
+            this.sourceCleanup = sourceCleanup;
+            ArgumentNullException.ThrowIfNull(stream);
             this.Stream = stream;
+            this.ioStream = new SourceIO(this);
             this.DataOffset = HeaderOffset + headerSize; // header(4), firstId(8) [lastId(8) is not stored];
             this.minDataChunk = minDataChunk;
             this.moveFactor = moveFactorPercent / 100.0;
             this.minTruncate = minUnusedTruncate;
             this.Serializer = serializer ?? DataContractDataSerializer.Default;
 
-            long streamLength = this.Stream.Length;
-            while (true)
+            try
             {
-                bool canRecoverRecords = false;
-                try
+                long streamLength = this.ioStream.Length;
+                while (true)
                 {
-                    this.FirstPosition = this.LastPosition = long.MinValue; // reset scan state
-                    this.Count = 0;
-                    this.spaces.Clear();
-
-                if (streamLength != 0)
-                { // open existing file
-
-                    #region read first position
-
-                    if (streamLength < HeaderOffset)
-                        throw new DataSourceException("invalid stream header - storage header is incomplete");
-
-                    byte[] buffer = new byte[HeaderOffset];
-                    this.Stream.Seek(0, SeekOrigin.Begin);
-                    ReadExactly(this.Stream, buffer, HeaderOffset);
-                    int hsize = ReadInt32LittleEndian(buffer);
-                    if ((uint)hsize > ushort.MaxValue || HeaderOffset + hsize > streamLength)
-                        throw new DataSourceException("invalid stream header - header size is outside the stream: " + hsize);
-
-                    if (hsize != headerSize)
-                        if ((onException & OnException.Recover) == OnException.Recover) // if set to recoverHeaderSize
-                            headerSize = (ushort)hsize;
-                        else
-                            throw new DataSourceException("invalid stream header - header size mismatch - " + headerSize + " needed, " + hsize + " found");
-
-                    this.DataOffset = HeaderOffset + headerSize;
-                    canRecoverRecords = true;
-
-                    long pos = ReadInt64LittleEndian(buffer, 4);
-                    if (pos != long.MinValue && !(this.DataOffset <= pos && pos < streamLength)) // check first position is in range
-                        throw new DataSourceException(pos + " is not between " + this.DataOffset + " and " + streamLength);
-
-                    this.FirstPosition = pos;
-
-                    #endregion
-
-                    // skip header bytes
-                    // Skip the unread header bytes before scanning records.
-                    #region scan all file to obtain last Id
-
-                    RecordHeader header = new();
-                    buffer = new byte[RecordHeader.HeaderSize];
-
-                    // initialize range to check
-                    long start = this.DataOffset;
-                    long free = 0;
-
-                    bool scanner = scanBytesCallback != null || scanObjectsCallback != null;
-
-                    while (pos != long.MinValue)
+                    bool canRecoverRecords = false;
+                    try
                     {
-                        if (!(this.DataOffset <= pos && pos < streamLength)) // check position if is in range
+                        this.FirstPosition = this.LastPosition = long.MinValue; // reset scan state
+                        this.Count = 0;
+                        this.spaces.Clear();
+
+                    if (streamLength != 0)
+                    { // open existing file
+
+                        #region read first position
+
+                        if (streamLength < HeaderOffset)
+                            throw new DataSourceException("invalid stream header - storage header is incomplete");
+
+                        byte[] buffer = new byte[HeaderOffset];
+                        this.ioStream.Seek(0, SeekOrigin.Begin);
+                        ReadExactly(this.ioStream, buffer, HeaderOffset);
+                        int hsize = ReadInt32LittleEndian(buffer);
+                        if ((uint)hsize > ushort.MaxValue || HeaderOffset + hsize > streamLength)
+                            throw new DataSourceException("invalid stream header - header size is outside the stream: " + hsize);
+
+                        if (hsize != headerSize)
+                            if ((onException & OnException.Recover) == OnException.Recover) // if set to recoverHeaderSize
+                                headerSize = (ushort)hsize;
+                            else
+                                throw new DataSourceException("invalid stream header - header size mismatch - " + headerSize + " needed, " + hsize + " found");
+
+                        this.DataOffset = HeaderOffset + headerSize;
+                        canRecoverRecords = true;
+
+                        long pos = ReadInt64LittleEndian(buffer, 4);
+                        if (pos != long.MinValue && !(this.DataOffset <= pos && pos < streamLength)) // check first position is in range
                             throw new DataSourceException(pos + " is not between " + this.DataOffset + " and " + streamLength);
 
-                        // read record header
-                        header = this.ReadRecordHeader(pos, buffer);
+                        this.FirstPosition = pos;
 
-                        if (header.Prev != this.LastPosition)
-                            throw new DataSourceException("invalid chain detected at " + pos);
+                        #endregion
 
-                        if (pos > start)
+                        // skip header bytes
+                        // Skip the unread header bytes before scanning records.
+                        #region scan all file to obtain last Id
+
+                        RecordHeader header = new();
+                        buffer = new byte[RecordHeader.HeaderSize];
+
+                        // initialize range to check
+                        long start = this.DataOffset;
+                        long free = 0;
+
+                        bool scanner = scanBytesCallback != null || scanObjectsCallback != null;
+
+                        while (pos != long.MinValue)
                         {
-                            free += (pos - start);
-                            this.MarkFree(start, pos);
-                        }
+                            if (!(this.DataOffset <= pos && pos < streamLength)) // check position if is in range
+                                throw new DataSourceException(pos + " is not between " + this.DataOffset + " and " + streamLength);
 
-                        if (scanner)
-                        { // data callback provided
-                            byte[] data = new byte[header.DataLength];
-                            ReadExactly(this.Stream, data, header.DataLength);
-                            scanBytesCallback?.Invoke(pos, data);
-                            scanObjectsCallback?.Invoke(pos, this.FromBytes(data));
-                        }
+                            // read record header
+                            header = this.ReadRecordHeader(pos, buffer);
 
-                        if (header.RecordLength < this.minDataChunk) // if have persistent, less than current
-                            this.minDataChunk = header.RecordLength;
+                            if (header.Prev != this.LastPosition)
+                                throw new DataSourceException("invalid chain detected at " + pos);
 
-                        // increase objects count
-                        this.Count++;
-
-                        this.LastPosition = pos;
-
-                        start = pos + header.RecordLength;
-
-                        pos = header.Next;
-
-                        if (pos < start && pos != long.MinValue) // error detected
-                            throw new DataSourceException("invalid chain detected at " + this.LastPosition);
-                    }
-                    #endregion
-
-                    if (streamLength > start)
-                    {
-                        long truncateTo = Math.Max(start, this.minTruncate);
-                        if (streamLength - truncateTo >= this.minTruncate) // could be stripped
-                            this.Stream.SetLength(streamLength = truncateTo);
-
-                        // mark bytes left as free;
-                        this.MarkFree(start, streamLength);
-                    }
-
-                    //Debug.WriteLine(free + " free of " + streamLength);
-                }
-                else // create new file
-                    this.Clear();
-
-                    state |= OpenState.Opened;
-                    listener?.Invoke(state, this);
-                    break;
-                }
-                catch (Exception ex)
-                { // exception - do OnException action
-                    state |= OpenState.Failed;
-                    listener?.Invoke(state, ex);
-
-                    if (onException == OnException.Default) onException = OnException.CloseAndThrow;
-
-                    if (canRecoverRecords && (onException & OnException.Recover) == OnException.Recover)
-                        try
-                        {
-                            if (this.TryToRecover(ex as DataSourceException, headerSize, scanObjectsCallback != null)) // header is recovered
+                            if (pos > start)
                             {
-                                onException &= ~OnException.Recover; // remove Recover flag - try just once
-                                state |= OpenState.Recovered;
-                                listener?.Invoke(state, this);
-                                streamLength = this.Stream.Length;
-                                continue;
+                                free += (pos - start);
+                                this.MarkFree(start, pos);
                             }
+
+                            if (scanner)
+                            { // data callback provided
+                                byte[] data = new byte[header.DataLength];
+                                ReadExactly(this.ioStream, data, header.DataLength);
+                                scanBytesCallback?.Invoke(pos, data);
+                                this.ThrowIfUnavailable();
+                                if (scanObjectsCallback != null)
+                                {
+                                    object? item = this.FromBytes(data);
+                                    this.ThrowIfUnavailable();
+                                    scanObjectsCallback(pos, item);
+                                    this.ThrowIfUnavailable();
+                                }
+                            }
+
+                            if (header.RecordLength < this.minDataChunk) // if have persistent, less than current
+                                this.minDataChunk = header.RecordLength;
+
+                            // increase objects count
+                            this.Count++;
+
+                            this.LastPosition = pos;
+
+                            start = pos + header.RecordLength;
+
+                            pos = header.Next;
+
+                            if (pos < start && pos != long.MinValue) // error detected
+                                throw new DataSourceException("invalid chain detected at " + this.LastPosition);
                         }
-                        catch (Exception recoverException)
+                        #endregion
+
+                        if (streamLength > start)
                         {
-                            Debug.WriteLine(recoverException);
+                            long truncateTo = Math.Max(start, this.minTruncate);
+                            if (streamLength - truncateTo >= this.minTruncate) // could be stripped
+                                this.ioStream.SetLength(streamLength = truncateTo);
+
+                            // mark bytes left as free;
+                            this.MarkFree(start, streamLength);
                         }
 
-                    if ((onException & OnException.Clear) == OnException.Clear)
-                    { // !!! Clear all data
+                        //Debug.WriteLine(free + " free of " + streamLength);
+                    }
+                    else // create new file
                         this.Clear();
-                        this.ClearHeader();
-                        state |= OpenState.Cleared;
-                        listener?.Invoke(state, this);
-                    }
 
-                    if ((onException & OnException.CloseSource) == OnException.CloseSource)
-                    {
-                        this.Stream.Close();
-                        state |= OpenState.Closed;
+                        state |= OpenState.Opened;
                         listener?.Invoke(state, this);
+                        this.ThrowIfUnavailable();
+                        break;
                     }
-
-                    if ((onException & OnException.Throw) == OnException.Throw)
-                    {
-                        state |= OpenState.Throw;
+                    catch (Exception ex)
+                    { // exception - do OnException action
+                        if (this.IsFaulted) throw;
+                        state |= OpenState.Failed;
                         listener?.Invoke(state, ex);
-                        throw;
-                    }
 
-                    break;
+                        if (onException == OnException.Default) onException = OnException.CloseAndThrow;
+
+                        if (canRecoverRecords && (onException & OnException.Recover) == OnException.Recover)
+                            try
+                            {
+                                if (this.TryToRecover(ex as DataSourceException, headerSize, scanObjectsCallback != null)) // header is recovered
+                                {
+                                    onException &= ~OnException.Recover; // remove Recover flag - try just once
+                                    state |= OpenState.Recovered;
+                                    listener?.Invoke(state, this);
+                                    streamLength = this.ioStream.Length;
+                                    continue;
+                                }
+                            }
+                            catch (Exception recoverException)
+                            {
+                                if (this.IsFaulted) throw;
+                                Debug.WriteLine(recoverException);
+                            }
+
+                        if ((onException & OnException.Clear) == OnException.Clear)
+                        { // !!! Clear all data
+                            this.Clear();
+                            this.ClearHeader();
+                            state |= OpenState.Cleared;
+                            listener?.Invoke(state, this);
+                        }
+
+                        if ((onException & OnException.CloseSource) == OnException.CloseSource)
+                        {
+                            this.ioStream.Close();
+                            state |= OpenState.Closed;
+                            listener?.Invoke(state, this);
+                        }
+
+                        if ((onException & OnException.Throw) == OnException.Throw)
+                        {
+                            state |= OpenState.Throw;
+                            listener?.Invoke(state, ex);
+                            throw;
+                        }
+
+                        break;
+                    }
                 }
+            }
+            catch (Exception) when (this.IsFaulted)
+            {
+                Exception first = this.StorageException!;
+                if (this.sourceCleanup.CloseOnFailure)
+                {
+                    try { this.CloseSource(); }
+                    catch (Exception) { } // Retain the original source/partial-mutation failure.
+                }
+                ExceptionDispatchInfo.Capture(first).Throw();
+                throw;
             }
         }
 
         /// <summary>
         /// flush internal stream
         /// </summary>
-        public void Flush() => this.Stream?.Flush();
+        public void Flush()
+        {
+            this.ThrowIfUnavailable();
+            this.ioStream.Flush();
+        }
 
         /// <summary>
         /// Get object by resource position (ID) 
         /// </summary>
         /// <param name="pos">position to read object</param>
         /// <returns>deserialized object from data using <see cref="IDataSerializer"/></returns>
-        public object? this[long pos] => this.FromBytes(this.GetData(pos));
+        public object? this[long pos]
+        {
+            get
+            {
+                this.ThrowIfUnavailable();
+                object? value = this.FromBytes(this.GetData(pos));
+                this.ThrowIfUnavailable();
+                return value;
+            }
+        }
 
         /// <summary>
         /// Get data at resource position (ID)
@@ -548,7 +622,7 @@ namespace RtTools
             Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
             RecordHeader header = this.ReadRecordHeader(pos, buffer);
             byte[] ret = new byte[header.DataLength];
-            ReadExactly(this.Stream, ret, header.DataLength);
+            ReadExactly(this.ioStream, ret, header.DataLength);
             return ret;
         }
 
@@ -560,7 +634,7 @@ namespace RtTools
             RecordHeader header = this.ReadRecordHeader(pos, buffer);
             if (header.DataLength < prefix.Length)
                 throw new InvalidDataException("Stored record is shorter than the requested prefix.");
-            ReadExactly(this.Stream, prefix, prefix.Length);
+            ReadExactly(this.ioStream, prefix, prefix.Length);
             return header.Next;
         }
 
@@ -570,12 +644,14 @@ namespace RtTools
         /// <param name="destination"></param>
         public void CopyTo(Stream destination)
         {
+            this.ThrowIfUnavailable();
+            ArgumentNullException.ThrowIfNull(destination);
             const int bufferSize = 0x1000;
             int read;
 
-            this.Stream.Seek(0, SeekOrigin.Begin);
+            this.ioStream.Seek(0, SeekOrigin.Begin);
             byte[] buffer = new byte[bufferSize];
-            while ((read = this.Stream.Read(buffer, 0, bufferSize)) != 0)
+            while ((read = this.ioStream.Read(buffer, 0, bufferSize)) != 0)
                 destination.Write(buffer, 0, read);
         }
 
@@ -597,7 +673,11 @@ namespace RtTools
         /// </summary>
         /// <param name="obj"></param>
         /// <returns>data position (resource ID)</returns>
-        public long Add(object? obj) => this.Add(this.ToBytes(obj));
+        public long Add(object? obj)
+        {
+            this.ThrowIfUnavailable();
+            return this.Add(this.ToBytes(obj));
+        }
 
         /// <summary>
         /// Update existing storage data
@@ -612,9 +692,22 @@ namespace RtTools
         /// <param name="pos"></param>
         /// <param name="obj"></param>
         /// <returns></returns>
-        public long Update(long pos, object? obj) => this.Update(pos, this.ToBytes(obj));
+        public long Update(long pos, object? obj)
+        {
+            this.ThrowIfUnavailable();
+            return this.Update(pos, this.ToBytes(obj));
+        }
 
         private long update(long pos, in byte[] data, in bool existing)
+        {
+            this.ThrowIfUnavailable();
+            ArgumentNullException.ThrowIfNull(data);
+            long epoch = Volatile.Read(ref this.mutationEpoch);
+            try { return this.updateCore(pos, data, existing); }
+            catch (Exception error) { this.RememberMutationFailure(epoch, error); throw; }
+        }
+
+        private long updateCore(long pos, in byte[] data, in bool existing)
         {
             int dataLength = data.Length;
             Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
@@ -624,7 +717,7 @@ namespace RtTools
                 RecordHeader header = this.ReadRecordHeader(pos, buffer);
                 if ((header.Next == long.MinValue) || // not last record - no need to worry about next
                     ((header.Next - pos - RecordHeader.HeaderSize) < dataLength) || // not enough space to store data
-                    (pos > this.Stream.Length * this.moveFactor))  // id is close to the end of file - so move forward to defragment
+                    (pos > this.ioStream.Length * this.moveFactor))  // id is close to the end of file - so move forward to defragment
                 { // persistence is in the end of file, so move it to decrease defragmentation
                     pos = this.remove(header, buffer); // remove current data record
                     createRecord = true;
@@ -633,7 +726,7 @@ namespace RtTools
                 { // the only thing to do is to update DataLength in header
                     this.MarkFree(pos, header.Next, true);
                     header.DataLength = dataLength;
-                    header.Write(this.Stream, buffer);
+                    header.Write(this.ioStream, buffer);
                 }
             }
 
@@ -642,13 +735,13 @@ namespace RtTools
                 if (this.LastPosition == long.MinValue)
                 { // file is empty
                     pos = this.DataOffset;
-                    new RecordHeader() { Position = pos, Prev = this.LastPosition, DataLength = dataLength }.Write(this.Stream, buffer);
+                    new RecordHeader() { Position = pos, Prev = this.LastPosition, DataLength = dataLength }.Write(this.ioStream, buffer);
                 }
                 else
                 { // nonempty file
                     Interval<long>? found = this.FindFirstToFit(RecordHeader.HeaderSize + dataLength);
 
-                    if (found != null && (found.End < this.Stream.Length))
+                    if (found != null && (found.End < this.ioStream.Length))
                     { // empty space found
                         RecordHeader hNext = this.ReadRecordHeader(found.End, buffer);
                         pos = found.Start;
@@ -657,16 +750,16 @@ namespace RtTools
                             RecordHeader h = this.ReadRecordHeader(hNext.Prev, buffer);
                             Debug.Assert(h.Next == found.End, h.Next + "!=" + found.End);
                             h.Next = pos;
-                            h.Write(this.Stream, buffer);
+                            h.Write(this.ioStream, buffer);
                         }
 
                         RecordHeader header = new() { Position = pos, Prev = hNext.Prev, Next = found.End, DataLength = dataLength };
                         // update last record to point current as next
                         hNext.Prev = pos;
-                        hNext.Write(this.Stream, buffer);
+                        hNext.Write(this.ioStream, buffer);
 
                         // write down new header
-                        header.Write(this.Stream, buffer);
+                        header.Write(this.ioStream, buffer);
                     }
                     else
                     { // no empty space found - write at the end of file
@@ -675,23 +768,23 @@ namespace RtTools
 
                         // update last record to point current as next
                         header.Next = pos = this.LastPosition + header.RecordLength;
-                        header.Write(this.Stream, buffer);
+                        header.Write(this.ioStream, buffer);
 
-                        new RecordHeader() { Position = pos, Prev = this.LastPosition, DataLength = dataLength }.Write(this.Stream, buffer);
+                        new RecordHeader() { Position = pos, Prev = this.LastPosition, DataLength = dataLength }.Write(this.ioStream, buffer);
                     }
                 }
                 this.Count++;
             }
 
-            this.Stream.Write(data, 0, dataLength);
+            this.ioStream.Write(data, 0, dataLength);
             this.MarkUsed(pos, pos + RecordHeader.HeaderSize + dataLength);
 
             if (pos > this.LastPosition) this.LastPosition = pos;
 
             if ((this.FirstPosition == long.MinValue) || (pos < this.FirstPosition))
             { // file was empty, so this is first id as well
-                this.Stream.Seek(4, SeekOrigin.Begin);
-                WriteInt64LittleEndian(this.Stream, this.FirstPosition = pos);
+                this.ioStream.Seek(4, SeekOrigin.Begin);
+                WriteInt64LittleEndian(this.ioStream, this.FirstPosition = pos);
             }
             this.Version++;
             return pos;
@@ -707,14 +800,14 @@ namespace RtTools
                 hPrev = this.ReadRecordHeader(header.Prev, buffer);
                 Debug.Assert(hPrev.Next == header.Position, hPrev.Next + "!=" + header.Position);
                 hPrev.Next = header.Next;
-                hPrev.Write(this.Stream, buffer);
+                hPrev.Write(this.ioStream, buffer);
             }
             else
             { // record is first in chain - mark new last
                 Debug.Assert(header.Position == this.FirstPosition, header.Position + "!=" + this.FirstPosition);
                 // write down new first Id
-                this.Stream.Seek(4, SeekOrigin.Begin);
-                WriteInt64LittleEndian(this.Stream, this.FirstPosition = header.Next);
+                this.ioStream.Seek(4, SeekOrigin.Begin);
+                WriteInt64LittleEndian(this.ioStream, this.FirstPosition = header.Next);
             }
 
             if (header.Next != long.MinValue)
@@ -722,13 +815,13 @@ namespace RtTools
                 RecordHeader h = this.ReadRecordHeader(header.Next, buffer);
                 Debug.Assert(h.Prev == header.Position, h.Prev + "!=" + header.Position);
                 h.Prev = header.Prev;
-                h.Write(this.Stream, buffer);
+                h.Write(this.ioStream, buffer);
             }
             else
             { // record is last in chain - mark new last
                 Debug.Assert(header.Position == this.LastPosition, header.Position + "!=" + this.LastPosition);
 
-                long streamLength = this.Stream.Length;
+                long streamLength = this.ioStream.Length;
                 if ((this.LastPosition = header.Prev) == long.MinValue)
                 { // last item was deleted - clear file
                     Debug.Assert(!hasPrev, "prev!=null");
@@ -749,7 +842,7 @@ namespace RtTools
                     long usedLength = Math.Max(header.Prev + hPrev.RecordLength, this.minTruncate);
                     if (streamLength - usedLength >= this.minTruncate)
                     {
-                        this.Stream.SetLength(usedLength);
+                        this.ioStream.SetLength(usedLength);
                         this.MarkUsed(usedLength, streamLength);
                     }
                 }
@@ -769,8 +862,14 @@ namespace RtTools
         /// <returns>should return long.MinValue</returns>
         public long Remove(long pos)
         {
-            Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
-            return this.remove(this.ReadRecordHeader(pos, buffer), buffer);
+            this.ThrowIfUnavailable();
+            long epoch = Volatile.Read(ref this.mutationEpoch);
+            try
+            {
+                Span<byte> buffer = stackalloc byte[RecordHeader.HeaderSize];
+                return this.remove(this.ReadRecordHeader(pos, buffer), buffer);
+            }
+            catch (Exception error) { this.RememberMutationFailure(epoch, error); throw; }
         }
 
         #endregion
@@ -780,19 +879,9 @@ namespace RtTools
         /// </summary>
         public void Dispose()
         {
-            this.Dispose(true);
-        }
-
-        /// <summary>
-        /// The bulk of the clean-up code is implemented in Dispose(bool)
-        /// </summary>
-        /// <param name="disposing"></param>
-        void Dispose(bool disposing)
-        {
-            if (disposing)
-            { // free managed resources
-                this.Stream.Close();
-            }
+            this.ThrowIfInIoCallback();
+            if (Interlocked.Exchange(ref this.disposed, 1) != 0) return;
+            this.CloseSource();
         }
 
         #region Fragmentation (spaces) members
@@ -807,7 +896,9 @@ namespace RtTools
 
         private void MarkUsed(long start, long end)
         {
-            if (end == long.MinValue) end = this.Stream.Length;
+            if (end == long.MinValue) end = this.ioStream.Length;
+
+            this.MutationStarting();
 
             Int64Interval range = new(start, end);
             int i = range.RemoveFrom(this.spaces);
@@ -823,7 +914,8 @@ namespace RtTools
 
         private void MarkFree(long start, long end, bool noCheck = false)
         {
-            if (end == long.MinValue) end = this.Stream.Length;
+            this.MutationStarting();
+            if (end == long.MinValue) end = this.ioStream.Length;
 
             if (noCheck ? (end > start) : ((end - start) >= this.minDataChunk))
             { // store space-range if size is OK
@@ -848,13 +940,14 @@ namespace RtTools
         /// </summary>
         public void ClearHeader()
         {
+            this.ThrowIfUnavailable();
             int headerSize = this.DataOffset - HeaderOffset;
             // prepare header
             byte[] headerData = new byte[this.DataOffset];
             BinaryPrimitives.WriteInt32LittleEndian(headerData, headerSize);
             BinaryPrimitives.WriteInt64LittleEndian(headerData.AsSpan(4), this.FirstPosition);
-            this.Stream.Seek(0, SeekOrigin.Begin);
-            this.Stream.Write(headerData, 0, this.DataOffset);// write header bytes
+            this.ioStream.Seek(0, SeekOrigin.Begin);
+            this.ioStream.Write(headerData, 0, this.DataOffset);// write header bytes
         }
 
         /// <summary>
@@ -863,9 +956,17 @@ namespace RtTools
         /// <param name="reserveSpace">file size for data (to have used space)</param>
         public void Clear(uint reserveSpace)
         {
+            this.ThrowIfUnavailable();
+            long epoch = Volatile.Read(ref this.mutationEpoch);
+            try { this.clear(reserveSpace); }
+            catch (Exception error) { this.RememberMutationFailure(epoch, error); throw; }
+        }
+
+        private void clear(uint reserveSpace)
+        {
             long newLen = this.DataOffset + reserveSpace;
-            if (this.Stream.Length != newLen)
-                this.Stream.SetLength(newLen); // trim file to clear
+            if (this.ioStream.Length != newLen)
+                this.ioStream.SetLength(newLen); // trim file to clear
 
             int headerSize = this.DataOffset - HeaderOffset;
             // prepare header
@@ -874,15 +975,15 @@ namespace RtTools
             BinaryPrimitives.WriteInt64LittleEndian(headerData.AsSpan(4), long.MinValue);
 
             byte[] testData = new byte[HeaderOffset];
-            this.Stream.Seek(0, SeekOrigin.Begin);
-            ReadExactly(this.Stream, testData, HeaderOffset);
+            this.ioStream.Seek(0, SeekOrigin.Begin);
+            ReadExactly(this.ioStream, testData, HeaderOffset);
 
             this.FirstPosition = this.LastPosition = long.MinValue;
 
             if (!PersistenceBinary.Equals(testData, headerData))
             { // read not what is expected
-                this.Stream.Seek(0, SeekOrigin.Begin);
-                this.Stream.Write(headerData, 0, HeaderOffset);// write header bytes
+                this.ioStream.Seek(0, SeekOrigin.Begin);
+                this.ioStream.Write(headerData, 0, HeaderOffset);// write header bytes
             }
 
             this.spaces.Clear(); // clear spaces list
@@ -894,6 +995,7 @@ namespace RtTools
 
         bool ICollection<byte[]>.Contains(byte[] item)
         {
+            this.ThrowIfUnavailable();
             if (item != null)
                 foreach (KeyValuePair<long, byte[]> data in this.ReadData)
                     if (PersistenceBinary.Equals(item, data.Value))
@@ -911,6 +1013,7 @@ namespace RtTools
 
         bool ICollection<byte[]>.Remove(byte[] item)
         {
+            this.ThrowIfUnavailable();
             if (item != null)
                 foreach (KeyValuePair<long, byte[]> data in this.ReadData)
                     if (PersistenceBinary.Equals(item, data.Value))

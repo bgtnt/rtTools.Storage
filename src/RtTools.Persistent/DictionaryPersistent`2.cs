@@ -124,10 +124,11 @@ namespace RtTools
             ValidateCodecPair(reader, writer);
             this.itemReader = reader;
             this.itemWriter = writer;
+            var sourceCleanup = new DataStorage.SourceCleanup(false);
             try
             {
                 this.itemsByKey = [];
-                DataStorage storage = new(stream, this.OnDataScan, null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
+                DataStorage storage = new(sourceCleanup, stream, this.OnDataScan, null, headerSize, serializer: Statics.DefaultSerializer, onException: onException,
                     listener: (state, data) =>
                     {
                         if (state == DataStorage.OpenState.Recovered ||
@@ -139,8 +140,11 @@ namespace RtTools
             }
             catch
             {
-                try { stream.Dispose(); }
-                catch { } // Preserve the initialization failure after attempting to release the owned stream.
+                if (sourceCleanup.TryBeginClose())
+                {
+                    try { stream.Dispose(); }
+                    catch { } // Preserve the initialization failure after attempting to release the owned stream.
+                }
                 throw;
             }
         }
@@ -169,11 +173,13 @@ namespace RtTools
 
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 if (this.itemsByKey.ContainsKey(key))
                     throw new ArgumentException("An item with the same key has already been added.", nameof(key));
 
                 DictionaryItem item = new(key, value);
                 byte[] data = this.ToBytes(item);
+                this.Storage.ThrowIfUnavailable();
                 // A custom writer can re-enter the dictionary while the lock is held.
                 if (this.itemsByKey.ContainsKey(key))
                     throw new ArgumentException("An item with the same key has already been added.", nameof(key));
@@ -216,6 +222,7 @@ namespace RtTools
         {
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 if (!this.itemsByKey.TryGetValue(key, out DictionaryItem? item)) // not found
                     return false;
                 this.Storage.Remove(item.PersistId);
@@ -309,9 +316,11 @@ namespace RtTools
 
                 lock (this.Storage.SynchronizationRoot)
                 {
+                    this.Storage.ThrowIfUnavailable();
                     this.itemsByKey.TryGetValue(key, out DictionaryItem? originalItem);
                     DictionaryItem candidate = new(originalItem != null ? originalItem.Key : key, value);
                     byte[] data = this.ToBytes(candidate);
+                    this.Storage.ThrowIfUnavailable();
                     // Re-read after serialization: a custom writer may remove or update the entry.
                     if (this.itemsByKey.TryGetValue(key, out DictionaryItem? item))
                     {
@@ -339,6 +348,7 @@ namespace RtTools
         {
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 this.Storage.Clear();
                 this.itemsByKey.Clear();
             }
@@ -435,9 +445,13 @@ namespace RtTools
         {
             lock (this.Storage.SynchronizationRoot)
             {
+                this.Storage.ThrowIfUnavailable();
                 if (!this.itemsByKey.TryGetValue(item.Key, out DictionaryItem? stored) ||
                     !EqualityComparer<TValue>.Default.Equals(stored.Value, item.Value))
+                {
+                    this.Storage.ThrowIfUnavailable();
                     return false;
+                }
 
                 this.Storage.Remove(stored.PersistId);
                 return this.itemsByKey.Remove(item.Key);

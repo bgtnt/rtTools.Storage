@@ -35,6 +35,9 @@ RunSuite("dictionary-logger", DictionaryLoggerChecks.Contracts);
 RunSuite("timelog-client-errors", TimeLogClientExceptionChecks.Contracts);
 RunSuite("collection-lifetime", CollectionLifetimeChecks.Contracts);
 RunSuite("storage-bounds", DataStorageBoundsChecks.Contracts);
+RunSuite("storage-failures", DataStorageFailureChecks.Contracts);
+RunSuite("synchronized-storage-failures", SynchronizedStorageFailureChecks.Contracts);
+RunSuite("wrapper-storage-failures", WrapperStorageFailureChecks.Contracts);
 
 string resultPath = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);

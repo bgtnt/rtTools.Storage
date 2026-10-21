@@ -110,8 +110,10 @@ namespace RtTools.Logger
                 {
                     // Application conversion runs outside the dictionary storage lock.
                     snapshot = convert(snapshot);
-                    if (snapshot == null) return null;
                 }
+                lock (this.Values.Storage.SynchronizationRoot)
+                    this.Values.Storage.ThrowIfUnavailable();
+                if (snapshot == null) return null;
                 return this.Log.Append(snapshot) ? snapshot : null;
             }
             finally { this.exitOperation(); }
@@ -141,6 +143,8 @@ namespace RtTools.Logger
             {
                 this.throwIfDisposed();
                 this.rejectReentry();
+                lock (this.Values.Storage.SynchronizationRoot)
+                    this.Values.Storage.ThrowIfUnavailable();
                 this.operationActive = true;
             }
             catch { Monitor.Exit(this.operationGate); throw; }

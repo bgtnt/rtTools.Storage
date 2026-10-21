@@ -122,12 +122,13 @@ namespace RtTools
             ValidateArguments(maxBuffer, reader, writer);
             this.itemReader = reader;
             this.itemWriter = writer;
+            var sourceCleanup = new DataStorage.SourceCleanup(false);
             try
             {
                 LimitedList<QueueItem> queueBuffer = this.buffer = new LimitedList<QueueItem>(maxBuffer);
                 ulong maxIndex = ulong.MinValue, lastBufferIndex = ulong.MinValue;
 
-                DataStorage storage = new(stream,
+                DataStorage storage = new(sourceCleanup, stream,
                     (pos, data) =>
                     {
                         QueueItem item = this.ReadItem(data, pos);
@@ -163,8 +164,11 @@ namespace RtTools
             }
             catch
             {
-                try { stream.Dispose(); }
-                catch { } // Preserve the opening/decoder failure after attempting to release the owned stream.
+                if (sourceCleanup.TryBeginClose())
+                {
+                    try { stream.Dispose(); }
+                    catch { } // Preserve the opening/decoder failure after attempting to release the owned stream.
+                }
                 throw;
             }
         }
@@ -217,6 +221,7 @@ namespace RtTools
             {
                 this.ThrowIfDisposed();
                 this.RejectCodecReentry();
+                this.Storage.ThrowIfUnavailable();
                 ulong index = checked(this.maxIndex + 1);
 
                 QueueItem li = new(index, item);
@@ -280,6 +285,7 @@ namespace RtTools
             {
                 this.ThrowIfDisposed();
                 this.RejectCodecReentry();
+                this.Storage.ThrowIfUnavailable();
                 if (this.Count == 0)
                     throw new InvalidOperationException("Queue is empty");
 
@@ -335,6 +341,7 @@ namespace RtTools
             {
                 this.ThrowIfDisposed();
                 this.RejectCodecReentry();
+                this.Storage.ThrowIfUnavailable();
                 this.Storage.Clear();
                 this.buffer.Clear();
                 this.maxIndex = this.lastBufferedIndex = ulong.MinValue;

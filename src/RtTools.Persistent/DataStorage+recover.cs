@@ -108,7 +108,7 @@ namespace RtTools
         RecoveryChain? scanHeaders(long firstPosition, ushort headerSize, bool validateSerializedData, Predicate<object?>? dataCheck)
         {
             Debug.WriteLine(headerSize);
-            long streamLength = this.Stream.Length;
+            long streamLength = this.ioStream.Length;
             long maxHeaderPos = streamLength - RecordHeader.HeaderSize;
 
 
@@ -127,13 +127,13 @@ namespace RtTools
             /// full scan on file to get valid headers
 
 
-            long streamPos = this.Stream.Seek(firstPosition, SeekOrigin.Begin);
+            long streamPos = this.ioStream.Seek(firstPosition, SeekOrigin.Begin);
             while (streamPos < streamLength)
             {
                 bbpos = streamPos - bb.Length; // position of first byte in BufferBuilder
-                int read = this.Stream.Read(bb.Buffer, bb.Length, (int)Math.Min(bb.Capacity - bb.Length, streamLength - streamPos));
+                int read = this.ioStream.Read(bb.Buffer, bb.Length, (int)Math.Min(bb.Capacity - bb.Length, streamLength - streamPos));
                 if (read <= 0)
-                    throw new DataSourceException("unexpected end of stream");
+                    UnexpectedEnd(this.ioStream);
                 bb.Length += read;
 
                 int offset = 0, max = bb.Length - RecordHeader.HeaderSize;
@@ -192,7 +192,7 @@ namespace RtTools
                 }
                 bb.Offset = offset;
                 bb.ShiftToStart(); // shift buffer
-                streamPos = this.Stream.Position;
+                streamPos = this.ioStream.Position;
             }
 
             /// Keep just headers, where:
@@ -375,11 +375,18 @@ namespace RtTools
 
         private bool TryToRecover(DataSourceException? exception, ushort headerSize, bool validateSerializedData)
         {
+            long epoch = System.Threading.Volatile.Read(ref this.mutationEpoch);
+            try { return this.TryToRecoverCore(exception, headerSize, validateSerializedData); }
+            catch (Exception error) { this.RememberMutationFailure(epoch, error); throw; }
+        }
+
+        private bool TryToRecoverCore(DataSourceException? exception, ushort headerSize, bool validateSerializedData)
+        {
             Debug.WriteLine("recover " + exception);
 
             RecoveryChain? found = null;
             long firstPos = this.FirstPosition;
-            if (firstPos >= this.DataOffset && firstPos < this.Stream.Length - RecordHeader.HeaderSize) // seems to be valid
+            if (firstPos >= this.DataOffset && firstPos < this.ioStream.Length - RecordHeader.HeaderSize) // seems to be valid
                 found = this.scanHeaders(firstPos, headerSize, validateSerializedData, null);
 
             if (found == null && firstPos != this.DataOffset) // not success - try to read from the beginning
@@ -394,8 +401,8 @@ namespace RtTools
             if (firstPos != this.FirstPosition)
             { // update header start
                 Debug.WriteLine("header FirstPos: " + this.FirstPosition + " -> " + firstPos);
-                this.Stream.Seek(4, SeekOrigin.Begin);
-                WriteInt64LittleEndian(this.Stream, this.FirstPosition = firstPos);
+                this.ioStream.Seek(4, SeekOrigin.Begin);
+                WriteInt64LittleEndian(this.ioStream, this.FirstPosition = firstPos);
             }
 
             byte[] buffer = new byte[RecordHeader.HeaderSize];
@@ -413,7 +420,7 @@ namespace RtTools
                     { // mark first header
                         Debug.WriteLine("hStart(" + header.Position + ").Prev: " + header.Prev + " -> long.MinValue");
                         header.Prev = long.MinValue;
-                        header.Write(this.Stream, buffer);
+                        header.Write(this.ioStream, buffer);
                     }
                 }
                 else if (part.Key > 0)
@@ -425,13 +432,13 @@ namespace RtTools
                     { // last is not pointing current
                         Debug.WriteLine(change + ": h(" + lastHeader.Position + ").Next: " + lastHeader.Next + " -> " + header.Position);
                         lastHeader.Next = header.Position;
-                        lastHeader.Write(this.Stream, buffer);
+                        lastHeader.Write(this.ioStream, buffer);
                     }
                     if (header.Prev != lastHeader.Position)
                     { // current is no pointing last
                         Debug.WriteLine(change + ": h(" + header.Position + ").Prev: " + header.Prev + " -> " + lastHeader.Position);
                         header.Prev = lastHeader.Position;
-                        header.Write(this.Stream, buffer);
+                        header.Write(this.ioStream, buffer);
                     }
                 }
 
@@ -442,7 +449,7 @@ namespace RtTools
                     { // mark last header
                         Debug.WriteLine("hEnd(" + tail.Position + ").Next: " + tail.Prev + " -> long.MinValue");
                         tail.Next = long.MinValue;
-                        tail.Write(this.Stream, buffer);
+                        tail.Write(this.ioStream, buffer);
                     }
                 }
             }
