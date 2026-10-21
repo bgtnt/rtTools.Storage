@@ -5,7 +5,7 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="rtTools.Storage" Version="[0.1.0-preview.4]" />
+    <PackageReference Include="rtTools.Storage" Version="[0.1.0-preview.5]" />
     <Compile Include="Program.cs" />
     <Compile Include="../HistoryAcceptance/CheckContext.cs" Link="Checks/CheckContext.cs" />
     <Compile Include="../HistoryAcceptance/AcceptanceGateChecks.cs" Link="Checks/AcceptanceGateChecks.cs" />
@@ -24,5 +24,7 @@
     <Compile Include="../HistoryAcceptance/DataStorageFailureChecks.cs" Link="Checks/DataStorageFailureChecks.cs" />
     <Compile Include="../HistoryAcceptance/SynchronizedStorageFailureChecks.cs" Link="Checks/SynchronizedStorageFailureChecks.cs" />
     <Compile Include="../HistoryAcceptance/WrapperStorageFailureChecks.cs" Link="Checks/WrapperStorageFailureChecks.cs" />
+    <Compile Include="../HistoryAcceptance/WrapperDisposeReentryChecks.cs" Link="Checks/WrapperDisposeReentryChecks.cs" />
+    <Compile Include="../HistoryAcceptance/ConstructorListenerCleanupChecks.cs" Link="Checks/ConstructorListenerCleanupChecks.cs" />
   </ItemGroup>
 </Project>

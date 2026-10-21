@@ -162,6 +162,7 @@ public class StreamPersistence : IDisposable
         {
             if (this.operationActive) throw new InvalidOperationException("Persistence callbacks cannot dispose the same wrapper.");
             if (this.disposed) return;
+            this.Storage.Storage.ThrowIfInIoCallback();
             this.disposed = true;
         }
         this.Storage.Dispose();

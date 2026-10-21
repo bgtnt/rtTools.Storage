@@ -3,7 +3,7 @@
   "SourceProject": "RtTools (owner-provided source)",
   "SourceCommit": "c66f77bdcf6a69cb5e4426243335b3ce1540b545",
   "PackageId": "rtTools.Storage",
-  "PackageVersion": "0.1.0-preview.4",
+  "PackageVersion": "0.1.0-preview.5",
   "License": "MIT",
   "ReviewedHistory": {
     "InitialImportCommit": "eef6dbe69aba3581bcbb096a5f89ab8ee564ae85",
@@ -41,10 +41,11 @@
       "Source": "rttools.Net10/DataStorage.cs",
       "Copy": "src/RtTools.Persistent/DataStorage.cs",
       "SourceSha256": "DC6F28A0A9CA431079C7425630672B26216E05785EBF4253601DF7BD4FB978AB",
-      "CopySha256": "CB5E2A277B06A6742BEDE8E774B8E0AA24D73D2E23908CDD6B209BAB00BB50CA",
+      "CopySha256": "A70F5C8FA6D3931859AFEA523DE6C4B728339A77FC5C4A1AD25D04990DD28AF6",
       "Changes": [
         "Validate complete record headers and representable nonnegative payload bounds before constructor acceptance, allocation, callbacks and subsequent header-based reads; retain existing chain/recovery policy.",
-        "Route engine I/O through first-failure tracking, guard unavailable operations, preserve advisory metadata, latch failures after possible mutations, abort constructor I/O failure without recovery/retry and coordinate one cleanup attempt with owning wrappers."
+        "Route engine I/O through first-failure tracking, guard unavailable operations, preserve advisory metadata, latch failures after possible mutations, abort constructor I/O failure without recovery/retry and coordinate one cleanup attempt with owning wrappers.",
+        "Preserve the primary opening exception when Failed/Closed/Throw application notifications fail, abort further recovery/clear, and honor direct-owner closing policies once; retain first-source failure precedence for actual cleanup I/O errors."
       ],
       "SourceGitBlobSha256": "753B28EE140A6CF44A079FF399EDCC490228883F3F79C374694DB5729138BC3C"
     },
@@ -286,12 +287,13 @@
       "Source": "rttools.Net10/StreamPersistence.cs",
       "Copy": "src/RtTools.Persistent/StreamPersistence.cs",
       "SourceSha256": "928BC99D2408B5C33214CBC6DC969EE3C96C37D955F18B9432E7AAD448D37AEE",
-      "CopySha256": "384E0A05A74B73CD35BC50B30236EF78C2113498D5174DC726675F78B1D3E73C",
+      "CopySha256": "299FBD7990E6F6F717A3DEEBFC855C509BF174F1D8190AA9FBDDC762AA3C7DF0",
       "Changes": [
         "Add an onLoad callback after assigning PersistId; clarify explicit save, trusted default serializer and store-local identity contracts.",
         "Validate input and release the owned stream on initialization failure.",
         "Serialize wrapper mutations; reject callback reentry; enforce disposed lifetime and release the storage lock before timer shutdown.",
-        "Check backing storage availability before user callbacks and persistence state reads; preserve PersistId assignment after a completed mutation with contained automatic flush failure."
+        "Check backing storage availability before user callbacks and persistence state reads; preserve PersistId assignment after a completed mutation with contained automatic flush failure.",
+        "Reject source-I/O callback disposal before changing wrapper lifetime, retaining normal cleanup after a storage fault."
       ],
       "SourceGitBlobSha256": "3030367E1775FA40E0EC3702B5A247460D5056BAD0CF5C91FBD94D2BE21B1F37"
     },
@@ -299,12 +301,13 @@
       "Source": "rttools.Net10/StreamPersistence`1.cs",
       "Copy": "src/RtTools.Persistent/StreamPersistence`1.cs",
       "SourceSha256": "0BC1FEF7B4A02D929089F39DE083AF49BC42B9F8C3A21985B79AB0D655D6C6EE",
-      "CopySha256": "C4CFBA0705DDA10040AC6A68EBB199E5BF581424F430C5980C04C04CC268C25D",
+      "CopySha256": "0EB9F997AAB0776036FDC233390A9D47D29018EBE91748EDA3A1080586FB26DD",
       "Changes": [
         "Retain explicit binary factories and the instance byte[] constructor convenience API; validate factories before owned file opening.",
         "Reject null reconstructed objects or binary payloads and release owned streams on initialization failure.",
         "Serialize wrapper mutations; reject callback reentry; enforce disposed lifetime and release the storage lock before timer shutdown; clarify explicit save and store-local identity contracts.",
-        "Check backing storage availability before codecs and persistence state reads; preserve PersistId assignment after a completed mutation with contained automatic flush failure."
+        "Check backing storage availability before codecs and persistence state reads; preserve PersistId assignment after a completed mutation with contained automatic flush failure.",
+        "Reject source-I/O callback disposal before changing wrapper lifetime, retaining normal cleanup after a storage fault."
       ],
       "SourceGitBlobSha256": "E9794B459E238D93E1B10FE9933BFD5A35D3BE2431DB0B1E28E710D3F0042C20"
     },
@@ -312,13 +315,14 @@
       "Source": "rttools.Net10/BufferedQueuePersistent`1.cs",
       "Copy": "src/RtTools.Persistent/BufferedQueuePersistent`1.cs",
       "SourceSha256": "ACFA0FCBDF98CF43BB89415ABDD6421BEF9AFF8732A00A0B3567178E4A72E59D",
-      "CopySha256": "ECF18080F29136297D73E2961F14A6F66E921E1064107F058F1BE74874F0A4DE",
+      "CopySha256": "D69DEDA0B05787918FF5D2E941DA46F418D9FEE69D83142B12F0561F734CB172",
       "Changes": [
         "Add optional paired payload reader/writer delegates while retaining the ordinal + length + payload frame and trusted-data default serializer.",
         "Validate buffer and codec arguments before owned file opening; release the owned stream on initialization failure; reject malformed queue envelopes.",
         "Check ordinal overflow before encoding or writing; reject operations after disposal and same-queue codec reentry while allowing Count and BufferedCount.",
         "Preserve bounded metadata selection for refill and full decoded FIFO snapshots for enumeration; document startup scanning and codec consistency across reopen.",
-        "Guard mutation entry before codecs/no-op paths while preserving committed FIFO/cache publication after a contained automatic flush failure."
+        "Guard mutation entry before codecs/no-op paths while preserving committed FIFO/cache publication after a contained automatic flush failure.",
+        "Reject source-I/O callback disposal before changing wrapper lifetime, retaining normal cleanup after a storage fault."
       ],
       "SourceGitBlobSha256": "67B845625A1E21785A1CC45A35E714C55AC7819441A4E00156CA43E98A96B1B1"
     },

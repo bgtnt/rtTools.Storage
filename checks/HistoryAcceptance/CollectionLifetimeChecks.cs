@@ -110,7 +110,7 @@ internal static class CollectionLifetimeChecks
                 Check.That(ReferenceEquals(failure, Check.Throws<IOException>(() =>
                 {
                     using var ignored = Open(kind, path, listener: listener);
-                }, "An opening listener may fail before the core reaches its close branch.")), "The original file listener failure must survive cleanup.");
+                }, "An opening listener failure must escape.")), "The original file listener failure must survive cleanup.");
                 Exclusive(path);
                 Same(before, File.ReadAllBytes(path), "Opening listener failure must not change valid fixture bytes.");
                 using var stream = new ObservedStream(File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None));
@@ -118,11 +118,11 @@ internal static class CollectionLifetimeChecks
                 {
                     using var ignored = Open(kind, stream, listener: listener);
                 }, "A stream opening listener failure must escape.")), "The original stream listener failure must survive cleanup.");
-                Check.Equal(1, stream.DisposeCount, "An always-throwing listener bypasses core cleanup, requiring one outer disposal.");
+                Check.Equal(1, stream.DisposeCount, "A throwing failure notification must still result in one owned cleanup attempt.");
                 Check.That(!stream.CanRead, "Listener failure must close the owned stream.");
                 Exclusive(path);
                 Same(before, File.ReadAllBytes(path), "Listener stream failure must preserve all persisted bytes.");
-                return "A listener throwing during successful open and again during failure handling cannot bypass outer cleanup; its original error and exact fixture bytes survive for both constructor paths.";
+                return "A listener throwing during successful open and again during failure handling cannot bypass closing-policy cleanup; its original error and exact fixture bytes survive for both constructor paths.";
             });
 
             ctx.Run(prefix + ".early-length-and-cleanup-failure", () =>
@@ -137,13 +137,13 @@ internal static class CollectionLifetimeChecks
                     Exception actual = Check.Throws<IOException>(() =>
                     {
                         using var ignored = Open(kind, stream);
-                    }, "Length fails before DataStorage's own initialization try/catch.");
+                    }, "Length fails before record initialization.");
                     Check.That(ReferenceEquals(failure, actual), "Even a throwing cleanup must not replace the original initialization error.");
-                    Check.Equal(1, stream.DisposeCount, "Early Length failure must trigger exactly one outer cleanup attempt.");
+                    Check.Equal(1, stream.DisposeCount, "Early Length failure must trigger exactly one owned cleanup attempt.");
                     Check.That(!inner.CanRead, "The synthetic cleanup failure occurs after releasing the actual resource.");
                     Same(bytes, inner.ToArray(), "Early initialization failure must preserve bytes.");
                 }
-                return "Length failure outside the core initialization catch is covered; one outer disposal releases the resource, and a secondary disposal exception cannot mask the original failure.";
+                return "Initial Length failure is covered; one owned disposal releases the resource, and a secondary disposal exception cannot mask the original failure.";
             });
 
             foreach (bool custom in new[] { true, false })

@@ -29,3 +29,5 @@ checks/HistoryAcceptance/*
 !checks/HistoryAcceptance/DataStorageFailureChecks.cs
 !checks/HistoryAcceptance/SynchronizedStorageFailureChecks.cs
 !checks/HistoryAcceptance/WrapperStorageFailureChecks.cs
+!checks/HistoryAcceptance/WrapperDisposeReentryChecks.cs
+!checks/HistoryAcceptance/ConstructorListenerCleanupChecks.cs

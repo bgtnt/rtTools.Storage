@@ -525,8 +525,9 @@ namespace RtTools
                     catch (Exception ex)
                     { // exception - do OnException action
                         if (this.IsFaulted) throw;
+                        ExceptionDispatchInfo primaryFailure = ExceptionDispatchInfo.Capture(ex);
                         state |= OpenState.Failed;
-                        listener?.Invoke(state, ex);
+                        this.NotifyOpeningFailure(listener, state, ex, primaryFailure);
 
                         if (onException == OnException.Default) onException = OnException.CloseAndThrow;
 
@@ -560,13 +561,13 @@ namespace RtTools
                         {
                             this.ioStream.Close();
                             state |= OpenState.Closed;
-                            listener?.Invoke(state, this);
+                            this.NotifyOpeningFailure(listener, state, this, primaryFailure);
                         }
 
                         if ((onException & OnException.Throw) == OnException.Throw)
                         {
                             state |= OpenState.Throw;
-                            listener?.Invoke(state, ex);
+                            this.NotifyOpeningFailure(listener, state, ex, primaryFailure);
                             throw;
                         }
 
@@ -583,6 +584,26 @@ namespace RtTools
                     catch (Exception) { } // Retain the original source/partial-mutation failure.
                 }
                 ExceptionDispatchInfo.Capture(first).Throw();
+                throw;
+            }
+            catch
+            {
+                // A secondary application notification must not skip an owning
+                // constructor's configured close. An actual close failure remains
+                // a source failure and propagates with its original identity.
+                if (this.sourceCleanup.CloseOnFailure &&
+                    (onException == OnException.Default || (onException & OnException.CloseSource) != 0))
+                    this.CloseSource();
+                throw;
+            }
+        }
+
+        private void NotifyOpeningFailure(OpenStateDelegate? listener, OpenState state, object data, ExceptionDispatchInfo primary)
+        {
+            try { listener?.Invoke(state, data); }
+            catch (Exception) when (!this.IsFaulted)
+            {
+                primary.Throw();
                 throw;
             }
         }

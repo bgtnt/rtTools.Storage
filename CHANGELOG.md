@@ -1,5 +1,17 @@
 # Release notes
 
+## 0.1.0-preview.5 — 2026-10-21
+
+- Queue and both StreamPersistence wrappers reject source-I/O callback Dispose
+  before marking themselves disposed. A caught rejection leaves the owner usable
+  and later normal disposal closes once; cleanup after a source fault stays allowed.
+- Direct DataStorage and SynchronizedDataStorage construction honors closing
+  policies even when an error notification throws. Secondary application errors
+  preserve the opening error; actual source failures retain first-source precedence.
+- Package-only regressions cover wrapper reentry, faulted cleanup, distinct
+  notification errors, close policies and resource release. Public signatures,
+  record layouts and runtime dependencies are unchanged.
+
 ## 0.1.0-preview.4 — 2026-10-21
 
 - DataStorage exposes its first StorageException and IsFaulted. A source-stream

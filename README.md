@@ -3,7 +3,7 @@
 Embedded .NET storage for application state and indexed history. One BCL-only
 package targets .NET 10 with no external runtime dependencies.
 
-Current preview: `0.1.0-preview.4`. APIs and file formats may change before a stable
+Current preview: `0.1.0-preview.5`. APIs and file formats may change before a stable
 release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 | Need | Type | Model |
@@ -17,12 +17,12 @@ release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 ## Install
 
-Download `rtTools.Storage.0.1.0-preview.4.nupkg` from the
-[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.4)
+Download `rtTools.Storage.0.1.0-preview.5.nupkg` from the
+[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.5)
 into a local `packages` directory, then run:
 
 ```sh
-dotnet add package rtTools.Storage --version 0.1.0-preview.4 --source ./packages
+dotnet add package rtTools.Storage --version 0.1.0-preview.5 --source ./packages
 ```
 
 Packages are distributed through GitHub Releases. This release does not require
@@ -269,6 +269,22 @@ storage operations after disposal throw ObjectDisposedException. Diagnostic
 properties remain readable. Synchronous source-stream callback reentry during
 Read/Write/Flush or disposal is rejected before a new storage operation or disposal
 transition. This does not prevent arbitrary application-created cross-thread lock cycles.
+
+Queue and StreamPersistence wrappers reject source-I/O callback disposal before
+changing their own disposed state. If the callback catches that rejection and
+the source operation succeeds, the wrapper remains usable; later normal disposal
+still closes its source once. Disposal after a storage fault remains permitted.
+
+During direct DataStorage or SynchronizedDataStorage construction, a secondary
+application exception from a Failed, Closed or Throw notification aborts opening
+and preserves the original opening exception.
+It does not continue into recovery/clear. Default and policies with CloseSource
+still attempt their required cleanup once; Throw-only leaves the source open.
+Application notification exceptions do not mark storage faulted. If an actual
+source operation, including cleanup Close, fails, the first StorageException
+takes precedence over application exceptions. Owning wrappers retain their
+documented initialization/cleanup exception rules, including StreamPersistence's
+ordered aggregate when its outer cleanup fails.
 
 ### History storage
 

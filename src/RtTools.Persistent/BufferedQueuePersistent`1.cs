@@ -396,6 +396,7 @@ namespace RtTools
             {
                 this.RejectCodecReentry();
                 if (this.disposed) return;
+                this.Storage.Storage.ThrowIfInIoCallback();
                 this.disposed = true;
             }
             this.Storage.Dispose();

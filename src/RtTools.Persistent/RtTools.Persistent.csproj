@@ -3,7 +3,7 @@
     <AssemblyName>rtTools.Storage</AssemblyName>
     <RootNamespace>RtTools</RootNamespace>
     <PackageId>rtTools.Storage</PackageId>
-    <Version>0.1.0-preview.4</Version>
+    <Version>0.1.0-preview.5</Version>
     <Description>Resident persistent state collections and indexed history storage for .NET.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

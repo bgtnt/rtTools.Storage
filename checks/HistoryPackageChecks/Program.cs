@@ -38,6 +38,8 @@ RunSuite("storage-bounds", DataStorageBoundsChecks.Contracts);
 RunSuite("storage-failures", DataStorageFailureChecks.Contracts);
 RunSuite("synchronized-storage-failures", SynchronizedStorageFailureChecks.Contracts);
 RunSuite("wrapper-storage-failures", WrapperStorageFailureChecks.Contracts);
+RunSuite("wrapper-dispose-reentry", WrapperDisposeReentryChecks.Contracts);
+RunSuite("constructor-listener-cleanup", ConstructorListenerCleanupChecks.Contracts);
 
 string resultPath = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);
