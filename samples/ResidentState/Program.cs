@@ -37,5 +37,6 @@ using (var state = Open(FileMode.Open))
 }
 
 HistoryLifecycle.Run(runRoot);
+PersistenceLifecycle.Run(runRoot);
 
 DictionaryPersistent<string, StateRecord> Open(FileMode mode) => new(file, mode, reader: RecordCodec.Read, writer: RecordCodec.Write);

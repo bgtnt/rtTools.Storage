@@ -3,7 +3,7 @@
   "SourceProject": "RtTools (owner-provided source)",
   "SourceCommit": "c66f77bdcf6a69cb5e4426243335b3ce1540b545",
   "PackageId": "rtTools.Storage",
-  "PackageVersion": "0.1.0-preview.1",
+  "PackageVersion": "0.1.0-preview.2",
   "License": "MIT",
   "ReviewedHistory": {
     "InitialImportCommit": "eef6dbe69aba3581bcbb096a5f89ab8ee564ae85",
@@ -20,182 +20,208 @@
       "Copy": "src/RtTools.Persistent/DictionaryPersistent`2.cs",
       "SourceSha256": "729638CC37877F44FA51A4760F7E8421EC716BD598706B5F54BA9BE9D4DF9075",
       "CopySha256": "729638CC37877F44FA51A4760F7E8421EC716BD598706B5F54BA9BE9D4DF9075",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "134C55AF58D8AF80F1F436A737443C79E3FD9584FA21BB5586B97F412A8B62F1"
     },
     {
       "Source": "rttools.Net10/ListPersistent`1.cs",
       "Copy": "src/RtTools.Persistent/ListPersistent`1.cs",
       "SourceSha256": "0E9CB206D7CD3F0E28C738F6A5AB073C78C4253FBC4B070FF1D001BCA2CE1FCF",
       "CopySha256": "0E9CB206D7CD3F0E28C738F6A5AB073C78C4253FBC4B070FF1D001BCA2CE1FCF",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "5B30B0D3F6EB16A50BDAE81318E25C9A00CBCC8685DF510D8E593D0D4C1DDC86"
     },
     {
       "Source": "rttools.Net10/DataStorage.cs",
       "Copy": "src/RtTools.Persistent/DataStorage.cs",
       "SourceSha256": "DC6F28A0A9CA431079C7425630672B26216E05785EBF4253601DF7BD4FB978AB",
       "CopySha256": "DC6F28A0A9CA431079C7425630672B26216E05785EBF4253601DF7BD4FB978AB",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "753B28EE140A6CF44A079FF399EDCC490228883F3F79C374694DB5729138BC3C"
     },
     {
       "Source": "rttools.Net10/DataStorage+DataHeader.cs",
       "Copy": "src/RtTools.Persistent/DataStorage+DataHeader.cs",
       "SourceSha256": "14D9E6BEA505F1E2EE3C959641DE9B245114C7E7422B0284AC557A3FAD971D7B",
       "CopySha256": "14D9E6BEA505F1E2EE3C959641DE9B245114C7E7422B0284AC557A3FAD971D7B",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "972CF7FE85FBDECA37B2E660569429899E25A818ADB9B8961C1D5EB37595F2DC"
     },
     {
       "Source": "rttools.Net10/DataStorage+recover.cs",
       "Copy": "src/RtTools.Persistent/DataStorage+recover.cs",
       "SourceSha256": "0ADAB8E59C1E0A8B813FD2062C337B6B121E51E529D222A6B8BC6E8BD2A7B2A4",
       "CopySha256": "0ADAB8E59C1E0A8B813FD2062C337B6B121E51E529D222A6B8BC6E8BD2A7B2A4",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "54A02FA26A9B4F6E077C1AF7643219273E3351A3E336B421E30DC428F0D57765"
     },
     {
       "Source": "rttools.Net10/SynchronizedDataStorage.cs",
       "Copy": "src/RtTools.Persistent/SynchronizedDataStorage.cs",
       "SourceSha256": "FD0EDC09B22AB927C2A027F0A0A8FB0AA8FF75951DB5738569FEF4F6E7B8E356",
       "CopySha256": "FD0EDC09B22AB927C2A027F0A0A8FB0AA8FF75951DB5738569FEF4F6E7B8E356",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "A0527A2ADDA1D5EF00F4DA6C1B0E33E22F6F9EF35C7E375AC2AAC0A5AEC9F587"
     },
     {
       "Source": "rttools.Net10/BufferBuilder.cs",
       "Copy": "src/RtTools.Persistent/BufferBuilder.cs",
       "SourceSha256": "B101B3A9B96608A1A69E74939E80BC0517CE157163D1D0D410372FBB3AAE5A6E",
       "CopySha256": "B101B3A9B96608A1A69E74939E80BC0517CE157163D1D0D410372FBB3AAE5A6E",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "B83CB1D2AD692CD96955451E39E0AD7F73D0A48C57EA43674CD8E2E43ED6C34A"
     },
     {
       "Source": "rttools.Net10/Interval.cs",
       "Copy": "src/RtTools.Persistent/Interval.cs",
       "SourceSha256": "291B1FAB2BCEF50935B0E71DA6C6F67B7BC3EA1CABFF00E544AF5FDC6CFD8341",
       "CopySha256": "291B1FAB2BCEF50935B0E71DA6C6F67B7BC3EA1CABFF00E544AF5FDC6CFD8341",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "BA4FBDADA204140C4E90B2481473CABB39033BD2C019B8729681C44632D33164"
     },
     {
       "Source": "rttools.Net10/PersistenceBinary.cs",
       "Copy": "src/RtTools.Persistent/PersistenceBinary.cs",
       "SourceSha256": "2AAC78C082AD56EDC45BAF69BB3C3C51D6D34A76E67F263EE32B8E1967357CA1",
       "CopySha256": "2AAC78C082AD56EDC45BAF69BB3C3C51D6D34A76E67F263EE32B8E1967357CA1",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "2AAC78C082AD56EDC45BAF69BB3C3C51D6D34A76E67F263EE32B8E1967357CA1"
     },
     {
       "Source": "rttools.Net10/DataSerializer.cs",
       "Copy": "src/RtTools.Persistent/DataSerializer.cs",
       "SourceSha256": "3161556E38F0C5E5A527083CD6F7D297402F275643E3913AA1C3C8FADB8AC9CC",
       "CopySha256": "3161556E38F0C5E5A527083CD6F7D297402F275643E3913AA1C3C8FADB8AC9CC",
-      "Changes": []
+      "Changes": [],
+      "SourceGitBlobSha256": "515D7074DCC56D449D50BA836581C49B6B1C2F97E6CCD8AC9C6F443E80C7BCCF"
     },
     {
       "Source": "rttools.Net10/Logger/DataRecord.cs",
       "Copy": "src/RtTools.History/Logger/DataRecord.cs",
       "SourceSha256": "9F65ADE115DF3589FB5212778C742C1EBFAEEBB6D633E14A0ABE5BF4892687EE",
       "CopySha256": "9F65ADE115DF3589FB5212778C742C1EBFAEEBB6D633E14A0ABE5BF4892687EE",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "CCDE037FFD0E03F95A45252F698D893DDC3AD90CF63018737BA9BCF7A9C99B02"
     },
     {
       "Source": "rttools.Net10/Logger/ILogKeyProjection.cs",
       "Copy": "src/RtTools.History/Logger/ILogKeyProjection.cs",
       "SourceSha256": "F5AFCD66DEB0D57F2753327008B189EF03722E21D4F3E1B983E8606B5DA69F77",
       "CopySha256": "F5AFCD66DEB0D57F2753327008B189EF03722E21D4F3E1B983E8606B5DA69F77",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "F5AFCD66DEB0D57F2753327008B189EF03722E21D4F3E1B983E8606B5DA69F77"
     },
     {
       "Source": "rttools.Net10/Logger/IndexedRange`1.cs",
       "Copy": "src/RtTools.History/Logger/IndexedRange`1.cs",
       "SourceSha256": "9F4C634646EE09D462A485C72B8398ED6CB2E791F087352399B8962B748F1FF2",
       "CopySha256": "9F4C634646EE09D462A485C72B8398ED6CB2E791F087352399B8962B748F1FF2",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "51F803A571A432FD2F0E91BEDD543AAAFE77EC08C28C223D0AEF35102810EDB5"
     },
     {
       "Source": "rttools.Net10/Logger/Key.cs",
       "Copy": "src/RtTools.History/Logger/Key.cs",
       "SourceSha256": "6075356AA9A52F79F7DD890D0174F38280F6D4221903052A2E57ACE3FFF9396A",
       "CopySha256": "6075356AA9A52F79F7DD890D0174F38280F6D4221903052A2E57ACE3FFF9396A",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "43C695C21E3D4C5F8BD881C8B878BB29655A7C13FF34CCB8A0910D113B37E5E0"
     },
     {
       "Source": "rttools.Net10/Logger/Key`1.cs",
       "Copy": "src/RtTools.History/Logger/Key`1.cs",
       "SourceSha256": "A0ED41C3DD4C1AF9C01D6A35E528D863488095743FCE0692546EFA86C196CC3C",
       "CopySha256": "A0ED41C3DD4C1AF9C01D6A35E528D863488095743FCE0692546EFA86C196CC3C",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "6E3C5946723D1BBF7A01C3A7E3F40D6ED7E1D248374C813B686D95C33384DCBE"
     },
     {
       "Source": "rttools.Net10/Logger/Log`2.cs",
       "Copy": "src/RtTools.History/Logger/Log`2.cs",
       "SourceSha256": "36E07CB95CDCEAEE608CA6F9E981801B24780E1EDC5443FB8543C2FFE8940447",
       "CopySha256": "36D8FF999AE3BBA82F8C06EAEE26F587983B5AAF7C126510A53E6794E031C469",
-      "Changes": "Contain Trace listener exceptions in automatic publication diagnostics; reject same-log diagnostic reentry to prevent disposal self-deadlock."
+      "Changes": "Contain Trace listener exceptions in automatic publication diagnostics; reject same-log diagnostic reentry to prevent disposal self-deadlock.",
+      "SourceGitBlobSha256": "C9BE2314D36C5CF495919BBA026083E1AB2875D674E3A4BE2C99980AF127242C"
     },
     {
       "Source": "rttools.Net10/Logger/Log`2+Find.cs",
       "Copy": "src/RtTools.History/Logger/Log`2+Find.cs",
       "SourceSha256": "9302058A5E107AF6832F62BCBD33AA4A5138913FB155798E5E032933390FA81E",
       "CopySha256": "9302058A5E107AF6832F62BCBD33AA4A5138913FB155798E5E032933390FA81E",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "1F2CA15581BA9196279C659863411F0AE56FE855C7489CF425BB0FB350EBE288"
     },
     {
       "Source": "rttools.Net10/Logger/Log`2+Indices.cs",
       "Copy": "src/RtTools.History/Logger/Log`2+Indices.cs",
       "SourceSha256": "AFABA60A53E4C9C861CD4F5198D1E90DE0F096A808C17CA7542EBEB3C81CC63E",
       "CopySha256": "AFABA60A53E4C9C861CD4F5198D1E90DE0F096A808C17CA7542EBEB3C81CC63E",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "E0C82010DE7756C1B4AAF9ED47F2C4649730D260EF8A6ED8B9DA063A173F0CC1"
     },
     {
       "Source": "rttools.Net10/Logger/Log`2+RangeState.cs",
       "Copy": "src/RtTools.History/Logger/Log`2+RangeState.cs",
       "SourceSha256": "41CBB1971E20D384CC0C3663FE412C1AE20ADE26BBA6E48CA129B25A92130D6B",
       "CopySha256": "41CBB1971E20D384CC0C3663FE412C1AE20ADE26BBA6E48CA129B25A92130D6B",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "41CBB1971E20D384CC0C3663FE412C1AE20ADE26BBA6E48CA129B25A92130D6B"
     },
     {
       "Source": "rttools.Net10/Logger/LogClient`2.cs",
       "Copy": "src/RtTools.History/Logger/LogClient`2.cs",
       "SourceSha256": "535FEE81D4217CFC5DCD63B9543A6FE4596D8D06A53B4D55BBE0CDF4EFE3465E",
       "CopySha256": "535FEE81D4217CFC5DCD63B9543A6FE4596D8D06A53B4D55BBE0CDF4EFE3465E",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "27F74148C2416F1095DA4240C3EB0B8D5AD69F9A4B84E767489594FF411D77D5"
     },
     {
       "Source": "rttools.Net10/Logger/LogRecord`1.cs",
       "Copy": "src/RtTools.History/Logger/LogRecord`1.cs",
       "SourceSha256": "5723F410109BFF0DF7087E1318742A391529FB6BC3ED5BE76FF23E70637818C8",
       "CopySha256": "5723F410109BFF0DF7087E1318742A391529FB6BC3ED5BE76FF23E70637818C8",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "A0139B59EB0AAE28923F39AADC55AD71967DA368F704B15C926E4CDCCE6E80D4"
     },
     {
       "Source": "rttools.Net10/Logger/Record`1.cs",
       "Copy": "src/RtTools.History/Logger/Record`1.cs",
       "SourceSha256": "52AEB0586314DD3B34F02B8E66475B7F2F8BB9BB58ACB0367F316EF63BF55B95",
       "CopySha256": "52AEB0586314DD3B34F02B8E66475B7F2F8BB9BB58ACB0367F316EF63BF55B95",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "26E977CAE88DDEAEE891F369DAE33B1FE83FD854C8DB55374E1BC8AFFAAD0D6E"
     },
     {
       "Source": "rttools.Net10/Logger/Record`2.cs",
       "Copy": "src/RtTools.History/Logger/Record`2.cs",
       "SourceSha256": "82ED6FED53194EBCC4BE877D972AFC1E68B1C8D495730EA67D41515C90413F7A",
       "CopySha256": "82ED6FED53194EBCC4BE877D972AFC1E68B1C8D495730EA67D41515C90413F7A",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "691CE216ECB02134E89206F205ED6E37DAED73188A6B85052A0F0EF452C5C36A"
     },
     {
       "Source": "rttools.Net10/Logger/StoreType.cs",
       "Copy": "src/RtTools.History/Logger/StoreType.cs",
       "SourceSha256": "518BEEAE347E19268F1F5E05DC5852B0F21C7584FC7A7B0C41458A83968F3B2A",
       "CopySha256": "518BEEAE347E19268F1F5E05DC5852B0F21C7584FC7A7B0C41458A83968F3B2A",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "4D588E7597B9897F5D539A614B746D6BD2C87F6E5B2859469235F64DD132B317"
     },
     {
       "Source": "rttools.Net10/ComparableSortedArrayCollection`1.cs",
       "Copy": "src/RtTools.History/ComparableSortedArrayCollection`1.cs",
       "SourceSha256": "588F7A66CA8C214234406E5F92FDF7EBA1B075DF9FC7654C08A8E98A3D00264F",
       "CopySha256": "588F7A66CA8C214234406E5F92FDF7EBA1B075DF9FC7654C08A8E98A3D00264F",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "F0262E70B52A561812B51F2B9CF9D9FE01175EA60241ECADB73EA5765C9CDC07"
     },
     {
       "Source": "rttools.Net10/SortedArrayCollection`1.cs",
       "Copy": "src/RtTools.History/SortedArrayCollection`1.cs",
       "SourceSha256": "45F7609E8D8FBD032A241D5BA5ACB53AD7062BED82685F628082C409385589CF",
       "CopySha256": "45F7609E8D8FBD032A241D5BA5ACB53AD7062BED82685F628082C409385589CF",
-      "Changes": null
+      "Changes": null,
+      "SourceGitBlobSha256": "16E90D62150D958DCFC2AA6A552627FA9213A5E6571B650F39A915FE8981DCCD"
     },
     {
       "Source": "rttools.Net10/Logger/TimeLog`1.cs",
@@ -206,7 +232,8 @@
         "Reject eligible default-serializer null records before persistence.",
         "Propagate explicit flush errors; observe automatic flush failures; attempt all final flushes/disposals; enforce disposed lifetime.",
         "Release acquired resources on constructor failure."
-      ]
+      ],
+      "SourceGitBlobSha256": "F7DAC8E19074EE7B1E2EB2149272E9C9C81AAB42386746047816A27AA8C2ACCC"
     },
     {
       "Source": "rttools.Net10/Logger/TimeLogClient`1.cs",
@@ -216,7 +243,94 @@
       "Changes": [
         "Normalize both inclusive query bounds to UTC.",
         "Release acquired main stream on constructor failure."
-      ]
+      ],
+      "SourceGitBlobSha256": "74BF59F5E66B64562AA6E8DCFE9058BD553926A76018560F8B67AE156A95A182"
+    },
+    {
+      "Source": "rttools.Net10/IPersistent.cs",
+      "Copy": "src/RtTools.Persistent/IPersistent.cs",
+      "SourceSha256": "127838609BABB9EB91B47AAC7DEEA472B24CB226F3E2B7F8426A154C4FDA0487",
+      "CopySha256": "8225E59B942571F749681C3FC7333633C6B149F00984D8D02437CBB47EDFC84C",
+      "Changes": [
+        "Clarify store-local PersistId ownership and relocation in XML documentation; use a file-scoped namespace."
+      ],
+      "SourceGitBlobSha256": "CB8BD4DBC744C99AC2D988A787B7361F008F8F4B4607DF825D082F2CAC70E656"
+    },
+    {
+      "Source": "rttools.Net10/IPersistentBinary.cs",
+      "Copy": "src/RtTools.Persistent/IPersistentBinary.cs",
+      "SourceSha256": "7DEE77507BA35E3958E9C58D803B120CD761BE4963A123F34549C8C9A5E4396D",
+      "CopySha256": "48EC59CB654971010609D043DB7A2F1CF351713A18575951ECCDE87AC2F03350",
+      "Changes": [
+        "Clarify non-null binary payload and explicit factory reconstruction in XML documentation; use a file-scoped namespace."
+      ],
+      "SourceGitBlobSha256": "51F858E171B8FF6EE0602A6BC1EEE5F50C99B8A925ABEAFA87F121CED7AAD69B"
+    },
+    {
+      "Source": "rttools.Net10/StreamPersistence.cs",
+      "Copy": "src/RtTools.Persistent/StreamPersistence.cs",
+      "SourceSha256": "928BC99D2408B5C33214CBC6DC969EE3C96C37D955F18B9432E7AAD448D37AEE",
+      "CopySha256": "6B5F88A8212BF5F433AA15EDB7DCD8C148C7966ED66B6480771BD19624E6DA15",
+      "Changes": [
+        "Add an onLoad callback after assigning PersistId; clarify explicit save, trusted default serializer and store-local identity contracts.",
+        "Validate input and release the owned stream on initialization failure.",
+        "Serialize wrapper mutations; reject callback reentry; enforce disposed lifetime and release the storage lock before timer shutdown."
+      ],
+      "SourceGitBlobSha256": "3030367E1775FA40E0EC3702B5A247460D5056BAD0CF5C91FBD94D2BE21B1F37"
+    },
+    {
+      "Source": "rttools.Net10/StreamPersistence`1.cs",
+      "Copy": "src/RtTools.Persistent/StreamPersistence`1.cs",
+      "SourceSha256": "0BC1FEF7B4A02D929089F39DE083AF49BC42B9F8C3A21985B79AB0D655D6C6EE",
+      "CopySha256": "5B50933C947F35DC65A8CDB0498B6937C1865836B936E7E9338BA4B5205BBFDC",
+      "Changes": [
+        "Retain explicit binary factories and the instance byte[] constructor convenience API; validate factories before owned file opening.",
+        "Reject null reconstructed objects or binary payloads and release owned streams on initialization failure.",
+        "Serialize wrapper mutations; reject callback reentry; enforce disposed lifetime and release the storage lock before timer shutdown; clarify explicit save and store-local identity contracts."
+      ],
+      "SourceGitBlobSha256": "E9794B459E238D93E1B10FE9933BFD5A35D3BE2431DB0B1E28E710D3F0042C20"
+    },
+    {
+      "Source": "rttools.Net10/BufferedQueuePersistent`1.cs",
+      "Copy": "src/RtTools.Persistent/BufferedQueuePersistent`1.cs",
+      "SourceSha256": "ACFA0FCBDF98CF43BB89415ABDD6421BEF9AFF8732A00A0B3567178E4A72E59D",
+      "CopySha256": "D9D998144942232E21BEB3761AFA1F6D4BE6951091E0685176C5D3B80F5FE5F9",
+      "Changes": [
+        "Add optional paired payload reader/writer delegates while retaining the ordinal + length + payload frame and trusted-data default serializer.",
+        "Validate buffer and codec arguments before owned file opening; release the owned stream on initialization failure; reject malformed queue envelopes.",
+        "Check ordinal overflow before encoding or writing; reject operations after disposal and same-queue codec reentry while allowing Count and BufferedCount.",
+        "Preserve bounded metadata selection for refill and full decoded FIFO snapshots for enumeration; document startup scanning and codec consistency across reopen."
+      ],
+      "SourceGitBlobSha256": "67B845625A1E21785A1CC45A35E714C55AC7819441A4E00156CA43E98A96B1B1"
+    },
+    {
+      "Source": "rttools.Net10/LimitedList.cs",
+      "Copy": "src/RtTools.Persistent/LimitedList.cs",
+      "SourceSha256": "4E0C01A8807F895CB54E91A4E6C9ED9737111CAEC29D1EBD6D54C13050D7BFAC",
+      "CopySha256": "4E0C01A8807F895CB54E91A4E6C9ED9737111CAEC29D1EBD6D54C13050D7BFAC",
+      "Changes": [],
+      "SourceGitBlobSha256": "96CF8C22C8E2ECBB40302CBC5BB80AA19A9879BD3DD82FE75E5262FED31FBB03"
+    },
+    {
+      "Source": "rttools.Net10/Logger/DictionaryLogger`2.cs",
+      "Copy": "src/RtTools.History/Logger/DictionaryLogger`2.cs",
+      "SourceSha256": "4137FC8285D735B90AD0B4CC327B02F4290696FF1A1A3696DBEDB8AC6E923CD9",
+      "CopySha256": "68450A26B6D188D20E0D74609C1FF2F66A5276EE9895F2DAFEDBA26D5D7CF8D8",
+      "Changes": [
+        "Retain Values, Log and the two-argument constructor; add optional paired state/history codecs validated before opening files.",
+        "Release acquired current-state resources on constructor failure and hold the dictionary lock across Update read/convert/write.",
+        "Respect suppressed or timestamp-rejected snapshots without implicit query flushing.",
+        "Serialize wrapper operations; reject callback reentry; dispose both stores once with ordered failure aggregation and release the operation gate before timer shutdown."
+      ],
+      "SourceGitBlobSha256": "5BD1E5E92CE55E8EDA7BA7BE34026378ECBBE79E25EB6007298AB9759C09EC19"
+    },
+    {
+      "Source": "rttools.Net10/SerializableKeyValuePair`2.cs",
+      "Copy": "src/RtTools.Persistent/SerializableKeyValuePair`2.cs",
+      "SourceSha256": "C7DF9D9AC81C81458F5D640C6D1C821EA9DA87D1D24D931BACA3716080D1ED99",
+      "CopySha256": "C7DF9D9AC81C81458F5D640C6D1C821EA9DA87D1D24D931BACA3716080D1ED99",
+      "Changes": [],
+      "SourceGitBlobSha256": "C7DF9D9AC81C81458F5D640C6D1C821EA9DA87D1D24D931BACA3716080D1ED99"
     }
   ],
   "Helpers": [
@@ -237,7 +351,8 @@
           "Utf8Sha256": "2A22806C43C4CC337F1F9A9780DA87D335C784EB6296FBFA91E8FA344B2416CF"
         }
       ],
-      "Note": "Exact source spans with a minimal BCL/type wrapper."
+      "Note": "Exact source spans with a minimal BCL/type wrapper.",
+      "SourceGitBlobSha256": "6E838EDA8D910C094EB5C1A3702F966DCE383B51F400A8566B4580493282982A"
     },
     {
       "Source": "rttools.Net10/Statics.cs",
@@ -256,7 +371,8 @@
           "Utf8Sha256": "C8495A90C9594C9E94E4BC556129DC66AF722D9CC107ED119062B4BEC3C00061"
         }
       ],
-      "Note": "Exact source spans with a minimal BCL/type wrapper."
+      "Note": "Exact source spans with a minimal BCL/type wrapper.",
+      "SourceGitBlobSha256": "6E838EDA8D910C094EB5C1A3702F966DCE383B51F400A8566B4580493282982A"
     }
   ],
   "SharedHistoryTypes": [
@@ -266,8 +382,13 @@
     "BufferBuilder"
   ],
   "Excluded": [
-    "DictionaryLogger",
     "application-specific consumer codecs",
     "unrelated RtTools modules"
-  ]
+  ],
+  "HashConventions": {
+    "SourceSha256": "SHA-256 of owner-provided source checkout bytes, retaining their checkout line endings; historical values are preserved.",
+    "SourceGitBlobSha256": "SHA-256 of raw file bytes from SourceCommit. Every source checkout matches that pinned blob after CRLF-to-LF normalization only.",
+    "CopySha256": "SHA-256 of the exact public source file bytes at the time this manifest was prepared.",
+    "SpanUtf8Sha256": "SHA-256 of the selected source lines encoded as UTF-8, joined with CRLF and including a final CRLF."
+  }
 }

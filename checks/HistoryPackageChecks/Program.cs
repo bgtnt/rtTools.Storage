@@ -29,6 +29,9 @@ RunSuite("timelog-null", TimeLogNullChecks.Contracts);
 RunSuite("log", LogChecks.Contracts);
 RunSuite("timelog-flush", TimeLogFlushChecks.Contracts);
 RunSuite("resource-lifetime", ResourceLifetimeChecks.Contracts);
+RunSuite("stream-persistence", StreamPersistenceChecks.Contracts);
+RunSuite("buffered-queue", BufferedQueueChecks.Contracts);
+RunSuite("dictionary-logger", DictionaryLoggerChecks.Contracts);
 
 string resultPath = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);

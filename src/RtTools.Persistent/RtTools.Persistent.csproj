@@ -3,7 +3,7 @@
     <AssemblyName>rtTools.Storage</AssemblyName>
     <RootNamespace>RtTools</RootNamespace>
     <PackageId>rtTools.Storage</PackageId>
-    <Version>0.1.0-preview.1</Version>
+    <Version>0.1.0-preview.2</Version>
     <Description>Resident persistent state collections and indexed history storage for .NET.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -21,6 +21,7 @@
     <None Include="../../LICENSE" Pack="true" PackagePath="/" />
     <None Include="../../CHANGELOG.md" Pack="true" PackagePath="/" />
     <None Include="../../samples/ResidentState/HistoryLifecycle.cs" Pack="true" PackagePath="samples/ResidentState/" />
+    <None Include="../../samples/ResidentState/PersistenceLifecycle.cs" Pack="true" PackagePath="samples/ResidentState/" />
     <None Include="../../samples/ResidentState/ResidentState.csproj" Pack="true" PackagePath="samples/ResidentState/" />
     <None Include="../../samples/ResidentState/RecordCodec.cs" Pack="true" PackagePath="samples/ResidentState/" />
     <None Include="../../samples/ResidentState/Program.cs" Pack="true" PackagePath="samples/ResidentState/" />
