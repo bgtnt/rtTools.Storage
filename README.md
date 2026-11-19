@@ -3,7 +3,7 @@
 Embedded .NET storage for application state and indexed history. One BCL-only
 package targets .NET 10 with no external runtime dependencies.
 
-Current preview: `0.1.0-preview.5`. APIs and file formats may change before a stable
+Current preview: `0.1.0-preview.6`. APIs and file formats may change before a stable
 release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 | Need | Type | Model |
@@ -17,12 +17,12 @@ release. Namespaces remain `RtTools` and `RtTools.Logger`.
 
 ## Install
 
-Download `rtTools.Storage.0.1.0-preview.5.nupkg` from the
-[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.5)
+Download `rtTools.Storage.0.1.0-preview.6.nupkg` from the
+[GitHub release](https://github.com/bgtnt/rtTools.Storage/releases/tag/v0.1.0-preview.6)
 into a local `packages` directory, then run:
 
 ```sh
-dotnet add package rtTools.Storage --version 0.1.0-preview.5 --source ./packages
+dotnet add package rtTools.Storage --version 0.1.0-preview.6 --source ./packages
 ```
 
 Packages are distributed through GitHub Releases. This release does not require
@@ -127,11 +127,13 @@ Storage object indexer/ReadObjects use IDataSerializer, not the binary factory.
 Use onLoad at open, or explicitly apply the factory to raw bytes, to reconstruct T.
 Payload callbacks must not reenter mutation or disposal of the same wrapper.
 
-BufferedQueuePersistent is a disk-backed FIFO. Enqueue saves; Peek retains;
-Dequeue removes. maxBuffer limits decoded head items, not total backlog. Refill
-scans bounded ordinal/position metadata before decoding selected payloads;
-opening decodes all records, and enumeration takes a full FIFO snapshot when
-iteration starts. Mutating a cached object does not resave it. Use the same
+BufferedQueuePersistent is a disk-backed FIFO. Enqueue saves an item, Peek keeps
+it, and Dequeue removes it. maxBuffer limits the number of decoded head items.
+Opening decodes all records and checks their physical order. When records are
+in FIFO order, refill reads only the prefix needed to fill the cache. If a
+write reuses space before an older record, refill scans the remaining ordering
+metadata to select the earliest items. Starting enumeration takes a full FIFO
+snapshot. Mutating a cached object does not resave it. Use the same
 codec pair when reopening; the default codec follows the trusted-type rules below.
 Only Count/BufferedCount may be called on the same queue from a codec; mutation,
 Peek/refill, enumeration and disposal are rejected.

@@ -3,7 +3,7 @@
   "SourceProject": "RtTools (owner-provided source)",
   "SourceCommit": "c66f77bdcf6a69cb5e4426243335b3ce1540b545",
   "PackageId": "rtTools.Storage",
-  "PackageVersion": "0.1.0-preview.5",
+  "PackageVersion": "0.1.0-preview.6",
   "License": "MIT",
   "ReviewedHistory": {
     "InitialImportCommit": "eef6dbe69aba3581bcbb096a5f89ab8ee564ae85",
@@ -19,10 +19,11 @@
       "Source": "rttools.Net10/DictionaryPersistent`2.cs",
       "Copy": "src/RtTools.Persistent/DictionaryPersistent`2.cs",
       "SourceSha256": "729638CC37877F44FA51A4760F7E8421EC716BD598706B5F54BA9BE9D4DF9075",
-      "CopySha256": "AAF906FEEFC10D41D74FDDA6F9C01F6D338B6321E36F2E8CD077840C941A4FB5",
+      "CopySha256": "739C5623761E9EC76F6140BEFE2BE0C53C251E8B300C4EBA55E02C584E6C7F27",
       "Changes": [
         "Validate paired codecs before filename open; preserve caller ownership on argument rejection and attempt owned stream cleanup on all initialization failures without replacing the primary error.",
-        "Reject unavailable mutation entry before codecs/no-op returns while preserving cache publication after a completed write and contained automatic flush failure."
+        "Reject unavailable mutation entry before codecs/no-op returns while preserving cache publication after a completed write and contained automatic flush failure.",
+        "Project resident entries directly into a shallow serializable snapshot under the existing dictionary lock."
       ],
       "SourceGitBlobSha256": "134C55AF58D8AF80F1F436A737443C79E3FD9584FA21BB5586B97F412A8B62F1"
     },
@@ -41,11 +42,12 @@
       "Source": "rttools.Net10/DataStorage.cs",
       "Copy": "src/RtTools.Persistent/DataStorage.cs",
       "SourceSha256": "DC6F28A0A9CA431079C7425630672B26216E05785EBF4253601DF7BD4FB978AB",
-      "CopySha256": "A70F5C8FA6D3931859AFEA523DE6C4B728339A77FC5C4A1AD25D04990DD28AF6",
+      "CopySha256": "37725529B6C44B80FF48107D16D3A6A55927357FE07635177A2A504272C28FBF",
       "Changes": [
         "Validate complete record headers and representable nonnegative payload bounds before constructor acceptance, allocation, callbacks and subsequent header-based reads; retain existing chain/recovery policy.",
         "Route engine I/O through first-failure tracking, guard unavailable operations, preserve advisory metadata, latch failures after possible mutations, abort constructor I/O failure without recovery/retry and coordinate one cleanup attempt with owning wrappers.",
-        "Preserve the primary opening exception when Failed/Closed/Throw application notifications fail, abort further recovery/clear, and honor direct-owner closing policies once; retain first-source failure precedence for actual cleanup I/O errors."
+        "Preserve the primary opening exception when Failed/Closed/Throw application notifications fail, abort further recovery/clear, and honor direct-owner closing policies once; retain first-source failure precedence for actual cleanup I/O errors.",
+        "Avoid allocating a predicate for first-fit lookup and an interval when the free-space list is empty."
       ],
       "SourceGitBlobSha256": "753B28EE140A6CF44A079FF399EDCC490228883F3F79C374694DB5729138BC3C"
     },
@@ -63,9 +65,10 @@
       "Source": "rttools.Net10/DataStorage+recover.cs",
       "Copy": "src/RtTools.Persistent/DataStorage+recover.cs",
       "SourceSha256": "0ADAB8E59C1E0A8B813FD2062C337B6B121E51E529D222A6B8BC6E8BD2A7B2A4",
-      "CopySha256": "81B659595C1BE7184F53B4410FA028A1A5267DDA4FE4A6F3CA3082E47DC3A312",
+      "CopySha256": "41835F62D26E2990B1A1C04704D48C19363FFC845517991D9B11ABD7EDA4B67C",
       "Changes": [
-        "Use tracked source I/O and a mutation-failure boundary during repair; physical or partial-repair failure preserves the first cause and aborts further recovery."
+        "Use tracked source I/O and a mutation-failure boundary during repair; physical or partial-repair failure preserves the first cause and aborts further recovery.",
+        "Skip candidate payload copies during raw recovery and filter the existing candidate list once. Serializers still receive an isolated payload."
       ],
       "SourceGitBlobSha256": "54A02FA26A9B4F6E077C1AF7643219273E3351A3E336B421E30DC428F0D57765"
     },
@@ -155,16 +158,21 @@
       "Source": "rttools.Net10/Logger/Log`2.cs",
       "Copy": "src/RtTools.History/Logger/Log`2.cs",
       "SourceSha256": "36E07CB95CDCEAEE608CA6F9E981801B24780E1EDC5443FB8543C2FFE8940447",
-      "CopySha256": "36D8FF999AE3BBA82F8C06EAEE26F587983B5AAF7C126510A53E6794E031C469",
-      "Changes": "Contain Trace listener exceptions in automatic publication diagnostics; reject same-log diagnostic reentry to prevent disposal self-deadlock.",
+      "CopySha256": "AAF2877A44A7AA5F2A5977A0961844ECEAD135AA9C9E40DAED67FE1866A7ED54",
+      "Changes": [
+        "Contain Trace listener exceptions in automatic publication diagnostics; reject same-log diagnostic reentry to prevent disposal self-deadlock.",
+        "Select the producer shard directly so a live thread can release a disposed log and its buffers."
+      ],
       "SourceGitBlobSha256": "C9BE2314D36C5CF495919BBA026083E1AB2875D674E3A4BE2C99980AF127242C"
     },
     {
       "Source": "rttools.Net10/Logger/Log`2+Find.cs",
       "Copy": "src/RtTools.History/Logger/Log`2+Find.cs",
       "SourceSha256": "9302058A5E107AF6832F62BCBD33AA4A5138913FB155798E5E032933390FA81E",
-      "CopySha256": "9302058A5E107AF6832F62BCBD33AA4A5138913FB155798E5E032933390FA81E",
-      "Changes": null,
+      "CopySha256": "6F45B184D5931CC6C1F08B7CB3D782C434E979B45A43B4F3735E9855C0DC4E4A",
+      "Changes": [
+        "Reuse bounded working storage while merging small query runs. Preserve run ordering, ties and the final sort for larger queries."
+      ],
       "SourceGitBlobSha256": "1F2CA15581BA9196279C659863411F0AE56FE855C7489CF425BB0FB350EBE288"
     },
     {
@@ -195,8 +203,10 @@
       "Source": "rttools.Net10/Logger/LogRecord`1.cs",
       "Copy": "src/RtTools.History/Logger/LogRecord`1.cs",
       "SourceSha256": "5723F410109BFF0DF7087E1318742A391529FB6BC3ED5BE76FF23E70637818C8",
-      "CopySha256": "5723F410109BFF0DF7087E1318742A391529FB6BC3ED5BE76FF23E70637818C8",
-      "Changes": null,
+      "CopySha256": "D8F644F5457F352DD084486C0D21E88EB274D3E3DE54DDC3B96E7F3318BB8982",
+      "Changes": [
+        "Use the finalized compression buffer and its logical length without copying the entire attempted compression result."
+      ],
       "SourceGitBlobSha256": "A0139B59EB0AAE28923F39AADC55AD71967DA368F704B15C926E4CDCCE6E80D4"
     },
     {
@@ -235,19 +245,22 @@
       "Source": "rttools.Net10/SortedArrayCollection`1.cs",
       "Copy": "src/RtTools.History/SortedArrayCollection`1.cs",
       "SourceSha256": "45F7609E8D8FBD032A241D5BA5ACB53AD7062BED82685F628082C409385589CF",
-      "CopySha256": "45F7609E8D8FBD032A241D5BA5ACB53AD7062BED82685F628082C409385589CF",
-      "Changes": null,
+      "CopySha256": "A5882773C0BD33217B476475F2E5DB76438740395675FEBD695A5757C9155BA3",
+      "Changes": [
+        "Locate duplicate boundaries by searching outward from a match and copy the matching range in one operation."
+      ],
       "SourceGitBlobSha256": "16E90D62150D958DCFC2AA6A552627FA9213A5E6571B650F39A915FE8981DCCD"
     },
     {
       "Source": "rttools.Net10/Logger/TimeLog`1.cs",
       "Copy": "src/RtTools.History/Logger/TimeLog`1.cs",
       "SourceSha256": "7B2968E2209895254EF0E61B0DC74B65834B408F8FC3626D94A2235A85C00198",
-      "CopySha256": "D641BA720DBB66FCC9149946A351B83C1F9BA8D6F0055EC7E35FBB4667F5DDEC",
+      "CopySha256": "5453EC50AC3FBC8BE253A9A9F1A4A1A487AAD1614E5E28EB7BE725F4B0FA332E",
       "Changes": [
         "Reject eligible default-serializer null records before persistence.",
         "Propagate explicit flush errors; observe automatic flush failures; attempt all final flushes/disposals; enforce disposed lifetime.",
-        "Release acquired resources on constructor failure."
+        "Release acquired resources on constructor failure.",
+        "Write the fixed append header from stack storage and zero the unused inline bytes."
       ],
       "SourceGitBlobSha256": "F7DAC8E19074EE7B1E2EB2149272E9C9C81AAB42386746047816A27AA8C2ACCC"
     },
@@ -315,14 +328,15 @@
       "Source": "rttools.Net10/BufferedQueuePersistent`1.cs",
       "Copy": "src/RtTools.Persistent/BufferedQueuePersistent`1.cs",
       "SourceSha256": "ACFA0FCBDF98CF43BB89415ABDD6421BEF9AFF8732A00A0B3567178E4A72E59D",
-      "CopySha256": "D69DEDA0B05787918FF5D2E941DA46F418D9FEE69D83142B12F0561F734CB172",
+      "CopySha256": "F3DBB3764F5852760EA1070E5203458B92AF9CEC75D3FB8019354BF435ED1E28",
       "Changes": [
         "Add optional paired payload reader/writer delegates while retaining the ordinal + length + payload frame and trusted-data default serializer.",
         "Validate buffer and codec arguments before owned file opening; release the owned stream on initialization failure; reject malformed queue envelopes.",
         "Check ordinal overflow before encoding or writing; reject operations after disposal and same-queue codec reentry while allowing Count and BufferedCount.",
         "Preserve bounded metadata selection for refill and full decoded FIFO snapshots for enumeration; document startup scanning and codec consistency across reopen.",
         "Guard mutation entry before codecs/no-op paths while preserving committed FIFO/cache publication after a contained automatic flush failure.",
-        "Reject source-I/O callback disposal before changing wrapper lifetime, retaining normal cleanup after a storage fault."
+        "Reject source-I/O callback disposal before changing wrapper lifetime, retaining normal cleanup after a storage fault.",
+        "Track strict physical FIFO order during opening and appends. Bound ordered refills to the next cache window and enumerate the captured snapshot without copying it into another array."
       ],
       "SourceGitBlobSha256": "67B845625A1E21785A1CC45A35E714C55AC7819441A4E00156CA43E98A96B1B1"
     },
@@ -330,21 +344,24 @@
       "Source": "rttools.Net10/LimitedList.cs",
       "Copy": "src/RtTools.Persistent/LimitedList.cs",
       "SourceSha256": "4E0C01A8807F895CB54E91A4E6C9ED9737111CAEC29D1EBD6D54C13050D7BFAC",
-      "CopySha256": "4E0C01A8807F895CB54E91A4E6C9ED9737111CAEC29D1EBD6D54C13050D7BFAC",
-      "Changes": [],
+      "CopySha256": "0C669F10140296CD6CE11E899EFDEF219C532EC835964B3FD2F4931B7F0192CB",
+      "Changes": [
+        "Clear the current backing array in place and copy the ring into one independent backing array."
+      ],
       "SourceGitBlobSha256": "96CF8C22C8E2ECBB40302CBC5BB80AA19A9879BD3DD82FE75E5262FED31FBB03"
     },
     {
       "Source": "rttools.Net10/Logger/DictionaryLogger`2.cs",
       "Copy": "src/RtTools.History/Logger/DictionaryLogger`2.cs",
       "SourceSha256": "4137FC8285D735B90AD0B4CC327B02F4290696FF1A1A3696DBEDB8AC6E923CD9",
-      "CopySha256": "B3BE55A7EC7E1190554D0BCB06FC1F748CED134E3F0B62C75105B5CE3D8533A1",
+      "CopySha256": "A6A17B21A81035297BC5DBC7AC314525D006B256950E5FE694266E38A0E76FAC",
       "Changes": [
         "Retain Values, Log and the two-argument constructor; add optional paired state/history codecs validated before opening files.",
         "Release acquired current-state resources on constructor failure and hold the dictionary lock across Update read/convert/write.",
         "Respect suppressed or timestamp-rejected snapshots without implicit query flushing.",
         "Serialize wrapper operations; reject callback reentry; dispose both stores once with ordered failure aggregation and release the operation gate before timer shutdown.",
-        "Reject wrapper entry on unavailable current-state storage and recheck after snapshot conversion before suppression/history append; direct history remains a separate resource."
+        "Reject wrapper entry on unavailable current-state storage and recheck after snapshot conversion before suppression/history append; direct history remains a separate resource.",
+        "Capture one snapshot array before calling the application converter outside the state lock."
       ],
       "SourceGitBlobSha256": "5BD1E5E92CE55E8EDA7BA7BE34026378ECBBE79E25EB6007298AB9759C09EC19"
     },
@@ -418,7 +435,7 @@
   "AuthoredFiles": [
     {
       "Copy": "src/RtTools.Persistent/DataStorage+IO.cs",
-      "CopySha256": "05B667322FF39319B7F7E20BD482D2A8F22D2DC11AD52E1C137BA1BEEE55FAC7",
+      "CopySha256": "B1A06EC4D8EC1B8ACEE5A925252354E8B18DADE6B4885AD1075C8F95B3A93A1A",
       "Origin": "New library implementation; not extracted from the pinned original source.",
       "Purpose": "Private source I/O adapter, stable first-failure state, mutation tracking and callback/disposal guards."
     }

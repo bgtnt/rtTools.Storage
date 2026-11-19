@@ -406,6 +406,20 @@ namespace RtTools
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => this.GetEnumerator();
 
+        // Project directly into the history snapshot without an intermediate key/value array.
+        // Like enumeration, this copies entries but retains the original key/value references.
+        internal SerializableKeyValuePair<TKey, TValue>[] CreateSerializableSnapshot()
+        {
+            lock (this.Storage.SynchronizationRoot)
+            {
+                SerializableKeyValuePair<TKey, TValue>[] snapshot = new SerializableKeyValuePair<TKey, TValue>[this.itemsByKey.Count];
+                int index = 0;
+                foreach (DictionaryItem item in this.itemsByKey.Values)
+                    snapshot[index++] = new SerializableKeyValuePair<TKey, TValue> { Key = item.Key, Value = item.Value };
+                return snapshot;
+            }
+        }
+
         ICollection<TValue> IDictionary<TKey, TValue>.Values
         {
             get

@@ -32,7 +32,7 @@ try {
     Invoke-VerificationStep 'library-restore' @('restore', $library, '--artifacts-path', $buildArtifacts, '--packages', $packages, '--configfile', $config)
     Invoke-VerificationStep 'library-build' @('build', $library, '--no-restore', '--configuration', 'Release', '--artifacts-path', $buildArtifacts, '/p:UseSharedCompilation=false')
     Invoke-VerificationStep 'library-pack' @('pack', $library, '--no-build', '--no-restore', '--configuration', 'Release', '--artifacts-path', $buildArtifacts, '--output', $feed)
-    $packagePath = Join-Path $feed 'rtTools.Storage.0.1.0-preview.5.nupkg'
+    $packagePath = Join-Path $feed 'rtTools.Storage.0.1.0-preview.6.nupkg'
     $packageItem = Get-Item -LiteralPath $packagePath
     $package = [pscustomobject]@{ Path=$packageItem.FullName; Bytes=$packageItem.Length; Sha256=(Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash }
 

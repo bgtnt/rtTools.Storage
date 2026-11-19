@@ -19,10 +19,12 @@ namespace RtTools.Logger
             private const int IncrementalMergeRecordLimit = 4096;
 
             private readonly List<TRecord> list = [];
-            private readonly List<TRecord[]> runs = [];
+            private List<TRecord[]>? runs;
             private int runRecordCount;
             private bool sawRunBoundary;
             private TRecord[] incrementalResult = [];
+            private TRecord[] incrementalScratch = [];
+            private int incrementalMergeWork;
 
             public Stream? Extended { get; set; }
             public Func<Stream>? GetExtended { get; set; }
@@ -53,17 +55,18 @@ namespace RtTools.Logger
                     return;
 
                 TRecord[] run = this.list.ToArray();
-                if (this.runs.Count == 0 && this.runRecordCount + run.Length <= IncrementalMergeRecordLimit)
+                if (this.runs == null && this.runRecordCount + run.Length <= IncrementalMergeRecordLimit)
                 {
-                    this.incrementalResult = RtTools.Statics.MergeSorted(this.incrementalResult, run, Log<TRecord, TKey>.Comparer);
+                    this.incrementalResult = this.MergeIncrementalRun(run);
                     this.runRecordCount += run.Length;
                     this.list.Clear();
                     return;
                 }
 
+                this.runs ??= [];
                 if (this.incrementalResult.Length > 0)
                 {
-                    this.runs.Add(this.incrementalResult);
+                    this.runs.Add(this.GetIncrementalResult());
                     this.incrementalResult = [];
                 }
 
@@ -72,29 +75,44 @@ namespace RtTools.Logger
                 this.list.Clear();
             }
 
+            private TRecord[] MergeIncrementalRun(TRecord[] run)
+            {
+                TRecord[] previous = this.incrementalResult;
+                if (previous.Length == 0)
+                    return run;
+
+                // Match MergeSorted's comparison order and left-first ties. Only reserve
+                // reusable capacity after enough cumulative copying to benefit small runs.
+                int count = this.runRecordCount + run.Length;
+                this.incrementalMergeWork = Math.Min(IncrementalMergeRecordLimit, this.incrementalMergeWork + count);
+                TRecord[] result = this.incrementalScratch;
+                if (result.Length < count)
+                {
+                    int capacity = this.incrementalMergeWork < IncrementalMergeRecordLimit
+                        ? count
+                        : Math.Min(IncrementalMergeRecordLimit, Math.Max(count, previous.Length * 2));
+                    result = new TRecord[capacity];
+                }
+                RtTools.Statics.MergeSorted(previous, 0, this.runRecordCount, run, 0, run.Length, result, 0, Log<TRecord, TKey>.Comparer);
+                this.incrementalScratch = previous;
+                return result;
+            }
+
+            private TRecord[] GetIncrementalResult()
+            {
+                if (this.incrementalResult.Length != this.runRecordCount)
+                    Array.Resize(ref this.incrementalResult, this.runRecordCount);
+                this.incrementalScratch = [];
+                return this.incrementalResult;
+            }
+
             private TRecord[] MergeRuns()
             {
-                if (this.runs.Count == 0)
-                    return this.incrementalResult;
+                if (this.runs == null)
+                    return this.GetIncrementalResult();
 
-                if (this.incrementalResult.Length > 0)
-                {
-                    this.runs.Add(this.incrementalResult);
-                    this.incrementalResult = [];
-                }
-
-                if (this.runs.Count == 0)
-                    return [];
                 if (this.runs.Count == 1)
                     return this.runs[0];
-
-                if (this.runs.Count <= 1)
-                {
-                    TRecord[] result = [];
-                    for (int i = 0; i < this.runs.Count; i++)
-                        result = RtTools.Statics.MergeSorted(result, this.runs[i], Log<TRecord, TKey>.Comparer);
-                    return result;
-                }
 
                 TRecord[] ret = new TRecord[this.runRecordCount];
                 int offset = 0;

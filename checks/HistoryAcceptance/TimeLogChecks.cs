@@ -74,6 +74,36 @@ internal static class TimeLogChecks
             return "Exact UTC timestamps and bytes survive close/reopen for payload sizes 0,1,7,8,9,1024; fixed=96 bytes, extension=1053 bytes.";
         });
 
+        ctx.Run("timelog.fixed-record-encoding", () =>
+        {
+            string mask = ContractMask(ctx, "fixed-encoding");
+            ExpectedRecord[] expected =
+            [
+                new(Epoch, "01020304050607"),
+                new(Epoch.AddSeconds(1), "FF"),
+                new(Epoch.AddSeconds(2), ""),
+                new(Epoch.AddSeconds(3), "1011121314151617"),
+                new(Epoch.AddSeconds(4), "202122232425262728"),
+                new(Epoch.AddSeconds(5), "")
+            ];
+            WriteFresh(mask, expected);
+
+            // Literal little-endian bytes pin the signed UTC timestamps, inline padding and extension offsets.
+            const string fixedHex =
+                "00A00A64D2AB21B70701020304050607" + // 7 inline bytes.
+                "80097263D2AB21B701FF000000000000" + // 1 inline byte, then six zero padding bytes.
+                "0073D962D2AB21B70000000000000000" + // Empty inline payload, then seven zero padding bytes.
+                "8023BF9D2D54DE480000000000000000" + // 8-byte payload at extension offset 0.
+                "00BA579E2D54DE480C00000000000000" + // 9-byte payload at extension offset 12.
+                "80AF0F61D2AB21B70000000000000000";  // Empty inline payload after extended records.
+            const string extendedHex = "08000000101112131415161709000000202122232425262728";
+            Check.Equal(fixedHex, Convert.ToHexString(File.ReadAllBytes(Path.ChangeExtension(mask, ".tlog"))),
+                "Fixed records must preserve the exact on-disk encoding, including zero inline padding.");
+            Check.Equal(extendedHex, Convert.ToHexString(File.ReadAllBytes(Path.ChangeExtension(mask, ".tldata"))),
+                "Extension records must preserve little-endian lengths and append order.");
+            return "Exact fixed and extension bytes verified for consecutive 7/1/0-byte inline payloads, 8/9-byte extended payloads at offsets 0/12, and a final empty inline payload.";
+        });
+
         ctx.Run("timelog.timestamp-monotonicity", () =>
         {
             string mask = ContractMask(ctx, "ordering");

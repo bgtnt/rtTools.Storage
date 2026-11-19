@@ -79,6 +79,8 @@ namespace RtTools
         private readonly Converter<T, byte[]>? itemWriter;
         private bool disposed;
         private bool codecActive;
+        // Proven by the opening scan and preserved only while new records append at the tail.
+        private bool physicalOrderMatchesFifo = true;
         /// <summary>
         /// max index (counter) - index of last enqueue item
         /// </summary>
@@ -127,12 +129,16 @@ namespace RtTools
             {
                 LimitedList<QueueItem> queueBuffer = this.buffer = new LimitedList<QueueItem>(maxBuffer);
                 ulong maxIndex = ulong.MinValue, lastBufferIndex = ulong.MinValue;
+                bool scannedAny = false;
 
                 DataStorage storage = new(sourceCleanup, stream,
                     (pos, data) =>
                     {
                         QueueItem item = this.ReadItem(data, pos);
                         var itemIndex = item.Index;
+                        if (scannedAny && itemIndex <= maxIndex)
+                            this.physicalOrderMatchesFifo = false;
+                        scannedAny = true;
                         maxIndex = Math.Max(maxIndex, itemIndex);
 
                         if (itemIndex <= lastBufferIndex || queueBuffer.Count < maxBuffer)
@@ -152,6 +158,8 @@ namespace RtTools
                             queueBuffer.Clear();
                             maxIndex = ulong.MinValue;
                             lastBufferIndex = ulong.MinValue;
+                            scannedAny = false;
+                            this.physicalOrderMatchesFifo = true;
                         }
                         listener?.Invoke(state, data);
                     });
@@ -226,6 +234,8 @@ namespace RtTools
 
                 QueueItem li = new(index, item);
                 li.PersistId = this.Storage.Add(this.WriteItem(li));
+                if (li.PersistId != this.Storage.Storage.LastPosition)
+                    this.physicalOrderMatchesFifo = false;
 
                 if (this.lastBufferedIndex == this.maxIndex)
                 { // items are fully buffered
@@ -295,6 +305,8 @@ namespace RtTools
                 QueueItem ret = this.buffer[0];
                 this.Storage.Remove(ret.PersistId);
                 this.buffer.RemoveAt(0);
+                if (this.Storage.Storage.Count <= 1)
+                    this.physicalOrderMatchesFifo = true;
 
                 if (this.buffer.Count == 0) // buffer is empty
                     this.lastBufferedIndex = ulong.MinValue;
@@ -306,20 +318,26 @@ namespace RtTools
         private void readToBuffer()
         {
             LimitedList<QueueItem> queueBuffer = this.buffer;
-            int limit = queueBuffer.Limit;
+            DataStorage storage = this.Storage.Storage;
+            int limit = Math.Min(queueBuffer.Limit, storage.Count);
             var selected = new LimitedList<KeyValuePair<ulong, long>>(limit);
             byte[] prefix = new byte[sizeof(ulong)];
-            DataStorage storage = this.Storage.Storage;
-            // Physical order can differ from FIFO after space reuse. Select only bounded
-            // index/position metadata before reading any selected record's full payload.
+            // A proven FIFO chain needs only its bounded prefix. After space reuse or an
+            // unordered opening scan, select bounded metadata from the complete chain instead.
             long position = storage.FirstPosition;
             while (position != long.MinValue)
             {
                 long recordPosition = position;
                 position = storage.ReadDataPrefix(recordPosition, prefix);
                 ulong itemIndex = BinaryPrimitives.ReadUInt64LittleEndian(prefix);
-                if (selected.Count == limit && itemIndex > selected[selected.Count - 1].Key) continue;
                 var record = new KeyValuePair<ulong, long>(itemIndex, recordPosition);
+                if (this.physicalOrderMatchesFifo)
+                {
+                    selected.Add(record);
+                    if (selected.Count == limit) break;
+                    continue;
+                }
+                if (selected.Count == limit && itemIndex > selected[selected.Count - 1].Key) continue;
                 int index = selected.BinarySearch(record, recordIndexComparer);
                 selected.InsertLastOut(index < 0 ? ~index : index, record);
             }
@@ -345,6 +363,7 @@ namespace RtTools
                 this.Storage.Clear();
                 this.buffer.Clear();
                 this.maxIndex = this.lastBufferedIndex = ulong.MinValue;
+                this.physicalOrderMatchesFifo = true;
             }
         }
 
@@ -369,16 +388,16 @@ namespace RtTools
         /// <returns></returns>
         public IEnumerator<T> GetEnumerator()
         {
-            QueueItem[] snapshot;
+            List<QueueItem> snapshot;
             lock (this.Storage.SynchronizationRoot)
             {
                 this.ThrowIfDisposed();
                 this.RejectCodecReentry();
-                List<QueueItem> items = new(this.Storage.Count);
+                snapshot = new List<QueueItem>(this.Storage.Count);
                 foreach (KeyValuePair<long, byte[]> data in this.Storage.Storage.ReadData)
-                    items.Add(this.ReadItem(data.Value, data.Key));
-                items.Sort(QueueItem.IndexComparer);
-                snapshot = [.. items];
+                    snapshot.Add(this.ReadItem(data.Value, data.Key));
+                if (!this.physicalOrderMatchesFifo)
+                    snapshot.Sort(QueueItem.IndexComparer);
             }
 
             foreach (QueueItem item in snapshot)

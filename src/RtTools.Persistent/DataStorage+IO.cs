@@ -82,12 +82,22 @@ namespace RtTools
                 finally { Volatile.Write(ref this.owner.ioThread, 0); }
             }
 
-            private void WriteSource(Action<Stream> operation)
+            // Explicit value state keeps operation arguments out of per-call closures.
+            private T ReadSource<TState, T>(TState state, Func<Stream, TState, T> operation)
+            {
+                this.owner.ThrowIfUnavailable();
+                Volatile.Write(ref this.owner.ioThread, Environment.CurrentManagedThreadId);
+                try { return operation(this.owner.Stream, state); }
+                catch (Exception error) { this.owner.RememberFailure(error); throw; }
+                finally { Volatile.Write(ref this.owner.ioThread, 0); }
+            }
+
+            private void WriteSource<TState>(TState state, Action<Stream, TState> operation)
             {
                 this.owner.ThrowIfUnavailable();
                 this.owner.MutationStarting();
                 Volatile.Write(ref this.owner.ioThread, Environment.CurrentManagedThreadId);
-                try { operation(this.owner.Stream); }
+                try { operation(this.owner.Stream, state); }
                 catch (Exception error) { this.owner.RememberFailure(error); throw; }
                 finally { Volatile.Write(ref this.owner.ioThread, 0); }
             }
@@ -95,14 +105,16 @@ namespace RtTools
             public override bool CanRead => this.owner.Stream.CanRead;
             public override bool CanSeek => this.owner.Stream.CanSeek;
             public override bool CanWrite => this.owner.Stream.CanWrite;
-            public override long Length => this.ReadSource(stream => stream.Length);
+            public override long Length => this.ReadSource(static stream => stream.Length);
             public override long Position
             {
-                get => this.ReadSource(stream => stream.Position);
-                set => this.ReadSource(stream => { stream.Position = value; return 0; });
+                get => this.ReadSource(static stream => stream.Position);
+                set => this.ReadSource(value, static (stream, position) => { stream.Position = position; return 0; });
             }
-            public override long Seek(long offset, SeekOrigin origin) => this.ReadSource(stream => stream.Seek(offset, origin));
-            public override int Read(byte[] buffer, int offset, int count) => this.ReadSource(stream => stream.Read(buffer, offset, count));
+            public override long Seek(long offset, SeekOrigin origin) =>
+                this.ReadSource((offset, origin), static (stream, state) => stream.Seek(state.offset, state.origin));
+            public override int Read(byte[] buffer, int offset, int count) =>
+                this.ReadSource((buffer, offset, count), static (stream, state) => stream.Read(state.buffer, state.offset, state.count));
             public override int Read(Span<byte> buffer)
             {
                 this.owner.ThrowIfUnavailable();
@@ -111,7 +123,8 @@ namespace RtTools
                 catch (Exception error) { this.owner.RememberFailure(error); throw; }
                 finally { Volatile.Write(ref this.owner.ioThread, 0); }
             }
-            public override void Write(byte[] buffer, int offset, int count) => this.WriteSource(stream => stream.Write(buffer, offset, count));
+            public override void Write(byte[] buffer, int offset, int count) =>
+                this.WriteSource((buffer, offset, count), static (stream, state) => stream.Write(state.buffer, state.offset, state.count));
             public override void Write(ReadOnlySpan<byte> buffer)
             {
                 this.owner.ThrowIfUnavailable();
@@ -121,8 +134,8 @@ namespace RtTools
                 catch (Exception error) { this.owner.RememberFailure(error); throw; }
                 finally { Volatile.Write(ref this.owner.ioThread, 0); }
             }
-            public override void SetLength(long value) => this.WriteSource(stream => stream.SetLength(value));
-            public override void Flush() => this.ReadSource(stream => { stream.Flush(); return 0; });
+            public override void SetLength(long value) => this.WriteSource(value, static (stream, length) => stream.SetLength(length));
+            public override void Flush() => this.ReadSource(static stream => { stream.Flush(); return 0; });
             protected override void Dispose(bool disposing) { if (disposing) this.owner.CloseSource(); base.Dispose(disposing); }
         }
     }

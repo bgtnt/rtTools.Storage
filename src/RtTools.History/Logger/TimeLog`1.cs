@@ -215,23 +215,24 @@ namespace RtTools.Logger
                     ?? throw new InvalidDataException("Time log writer returned null data.");
                 var dlen = data.Length;
 
-                byte[] rec = new byte[RecordSize];
+                Span<byte> rec = stackalloc byte[RecordSize];
                 if (dlen >= sizeof(long))
                 { // bug data - no space to store
                     BinaryPrimitives.WriteInt64LittleEndian(rec, now.ToBinary());
-                    BinaryPrimitives.WriteInt64LittleEndian(rec.AsSpan(sizeof(long)), this.extendedStreamW.Length);
-                    this.mainStreamW.Write(rec, 0, RecordSize); // write time stamp + extended position
+                    BinaryPrimitives.WriteInt64LittleEndian(rec.Slice(sizeof(long)), this.extendedStreamW.Length);
+                    this.mainStreamW.Write(rec); // write time stamp + extended position
 
                     BinaryPrimitives.WriteInt32LittleEndian(rec, dlen);
-                    this.extendedStreamW.Write(rec, 0, sizeof(int)); // write data length
+                    this.extendedStreamW.Write(rec.Slice(0, sizeof(int))); // write data length
                     this.extendedStreamW.Write(data, 0, dlen); // write data itself
                 }
                 else
                 { // dlen < 8 bytes - could be directly stored
                     BinaryPrimitives.WriteInt64LittleEndian(rec, -now.ToBinary());
                     rec[sizeof(long)] = (byte)dlen;
-                    data.CopyTo(rec, sizeof(long) + 1);
-                    this.mainStreamW.Write(rec, 0, RecordSize); // write time stamp + data
+                    data.AsSpan().CopyTo(rec.Slice(sizeof(long) + 1));
+                    rec.Slice(sizeof(long) + 1 + dlen).Clear(); // Keep unused inline bytes canonical zero.
+                    this.mainStreamW.Write(rec); // write time stamp + data
                 }
                 this.lastLogTime = now;
                 this.resetTimer();

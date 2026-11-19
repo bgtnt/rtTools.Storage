@@ -181,10 +181,6 @@ namespace RtTools.Logger
         public Exception? WriteError => Volatile.Read(ref this.writeError);
         private readonly PendingBufferShard[] pendingBufferShards;
         [ThreadStatic]
-        private static Log<TRecord, TKey>? threadPendingBufferOwner;
-        [ThreadStatic]
-        private static PendingBufferShard? threadPendingBufferShard;
-        [ThreadStatic]
         private static Log<TRecord, TKey>? threadDiagnosticOwner;
 
         /// <summary>
@@ -540,14 +536,8 @@ namespace RtTools.Logger
 
         private PendingBufferShard GetPendingBufferShard()
         {
-            if (ReferenceEquals(threadPendingBufferOwner, this) && threadPendingBufferShard != null)
-                return threadPendingBufferShard;
-
             PendingBufferShard[] shards = this.pendingBufferShards;
-            PendingBufferShard shard = shards[(Environment.CurrentManagedThreadId & int.MaxValue) % shards.Length];
-            threadPendingBufferOwner = this;
-            threadPendingBufferShard = shard;
-            return shard;
+            return shards[(Environment.CurrentManagedThreadId & int.MaxValue) % shards.Length];
         }
 
         private TRecord[] DrainPendingBuffer()

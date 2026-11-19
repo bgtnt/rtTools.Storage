@@ -623,7 +623,7 @@ namespace RtTools
         /// </summary>
         public void Clear()
         {
-            this.items = new T[this.limit];
+            Array.Clear(this.items, 0, this.items.Length);
             this.Count = this.start = 0;
         }
 
@@ -783,7 +783,7 @@ namespace RtTools
         public LimitedList<T> Copy()
         {
             LimitedList<T> ret = new(this.limit);
-            ret.items = (T[])this.items.Clone();
+            Array.Copy(this.items, ret.items, this.items.Length);
             ret.start = this.start;
             ret.Count = this.Count;
             return ret;

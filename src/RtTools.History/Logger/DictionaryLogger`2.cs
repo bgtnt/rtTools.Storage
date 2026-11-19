@@ -97,15 +97,7 @@ namespace RtTools.Logger
             this.enterOperation();
             try
             {
-                KeyValuePair<TKey, TValue>[] values;
-                lock (this.Values.Storage.SynchronizationRoot)
-                {
-                    values = new KeyValuePair<TKey, TValue>[this.Values.Count];
-                    ((ICollection<KeyValuePair<TKey, TValue>>)this.Values).CopyTo(values, 0);
-                }
-
-                SerializableKeyValuePair<TKey, TValue>[] snapshot = Array.ConvertAll(values,
-                    pair => new SerializableKeyValuePair<TKey, TValue> { Key = pair.Key, Value = pair.Value });
+                SerializableKeyValuePair<TKey, TValue>[] snapshot = this.Values.CreateSerializableSnapshot();
                 if (convert != null)
                 {
                     // Application conversion runs outside the dictionary storage lock.

@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using RtTools.Logger;
 using IntKey = RtTools.Logger.Key.KeyInt64;
 
@@ -61,6 +62,22 @@ internal static class ResourceLifetimeChecks
             AssertExclusiveOpen(extension);
             Check.That(File.ReadAllBytes(main).SequenceEqual(bytes), "Failed open must preserve the invalid input bytes.");
             return "Invalid last timestamp throws ArgumentException and preserves input bytes; acquired file handles are immediately released without GC.";
+        });
+
+        ctx.Run("resources.log-disposed-producer-collection", () =>
+        {
+            string mask = Mask(ctx, "log-producer-collection");
+            int producerThread = Environment.CurrentManagedThreadId;
+            WeakReference log = AppendAndDisposeLog(mask);
+            // The producer stays alive here; only the non-inlined helper held the Log strongly.
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            Check.Equal(producerThread, Environment.CurrentManagedThreadId, "Collection must run on the still-live producer thread.");
+            Check.That(!log.IsAlive, "A disposed Log must be collectible while the thread that appended to it remains alive.");
+            foreach (string extension in new[] { ".data", ".extra", ".buffer", ".index" })
+                AssertExclusiveOpen(Path.ChangeExtension(mask, extension));
+            return "Appended Log is disposed with its timer disabled, releases all four handles, and is collected while its producer thread remains alive.";
         });
 
         ctx.Run("resources.log-timer-throwing-diagnostic", () =>
@@ -194,6 +211,14 @@ internal static class ResourceLifetimeChecks
             }
             return "Actual timer diagnostic rejects same-log Dispose, both Append overloads, Publish, Flush and DeleteAll before mutation or batch enumeration; callback completes within five seconds, original WriteError remains, external Dispose closes all four handles, and trace state is restored.";
         });
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference AppendAndDisposeLog(string mask)
+    {
+        using var log = new Log<Record<IntKey>, IntKey>(mask, autoWriteMilliseconds: Timeout.Infinite);
+        log.Append(new Record<IntKey> { Key = new IntKey { Value = 1 }, Data = [1, 2, 3] });
+        return new WeakReference(log);
     }
 
     private static byte[] Identity(byte[] data) => data;

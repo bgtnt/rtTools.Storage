@@ -1,5 +1,21 @@
 # Release notes
 
+## 0.1.0-preview.6 — 2026-11-20
+
+- DataStorage reduces allocations during reads and appends. Raw recovery skips
+  payload copies and filters candidate headers in place.
+- SortedArrayCollection finds the boundaries of duplicate keys in logarithmic
+  time in the length of the equal run after locating a match.
+- TimeLog writes fixed record headers from stack storage. Producers can release
+  a disposed Log and its indexes while their threads remain alive.
+- BufferedQueuePersistent reads just the next cache-sized prefix when records
+  are in FIFO order. Queue enumeration and DictionaryLogger snapshots avoid a
+  temporary array.
+- LimitedList reuses its backing array on Clear and allocates one backing array
+  per Copy. Log writes use compressed bytes directly from the compression buffer.
+- Log.FindAll and LogClient.FindAll reuse merge buffers for queries that collect
+  records from many small sorted runs.
+
 ## 0.1.0-preview.5 — 2026-10-21
 
 - Queue and both StreamPersistence wrappers reject source-I/O callback Dispose

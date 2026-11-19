@@ -171,8 +171,12 @@ namespace RtTools
                                 }
                                 try
                                 {
-                                    byte[] data = bb.ReadArray<byte>(dlen, 1) ?? throw new DataSourceException("Unable to read serialized data.");
-                                    object? item = validateSerializedData || dataCheck != null ? this.FromBytes(data) : null;
+                                    object? item = null;
+                                    if (validateSerializedData || dataCheck != null)
+                                    {
+                                        byte[] data = bb.ReadArray<byte>(dlen, 1) ?? throw new DataSourceException("Unable to read serialized data.");
+                                        item = this.FromBytes(data);
+                                    }
                                     if (dataCheck?.Invoke(item) ?? true)
                                     { // data is OK
                                         RecordHeader header = new() { Position = headerPos, Prev = prev, Next = next, DataLength = dlen };
@@ -199,8 +203,7 @@ namespace RtTools
             ///    1. points start/end (prev==long.MinValue) or (next==long.MinValue)
             /// or 2. there is a header pointing (?.prev=header.Position && header.Next == ?.Position) current one
             /// or 3. there is a header, pointing (next)
-            List<RecordHeader> potential = [.. sorted];
-            while (potential.RemoveAll(s =>
+            sorted.RemoveAll(s =>
                  {
                      if ((s.Prev != long.MinValue && // not marked as first
                           (!headers.TryGetValue(s.Prev, out RecordHeader h) || h.Next != s.Position)) && // previous is pointing OK
@@ -209,16 +212,16 @@ namespace RtTools
                          return true; // headers.Remove(s.Position);
 
                      return false;
-                 }) > 0) ;
+                 });
 
-            if (potential.Count == 0) return null;
+            if (sorted.Count == 0) return null;
 
             /// headers contains all possible data headers with possible values for prev/next/datalen
             List<RecordHeader>? chain = null;
             List<RecordHeader[]> chains = [];
             RecordHeader hLast = default;
             bool hasLast = false;
-            foreach (RecordHeader header in potential)
+            foreach (RecordHeader header in sorted)
             {
                 if (!hasLast)
                 { // first header - just create a chain

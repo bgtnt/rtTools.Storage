@@ -154,6 +154,50 @@ internal static class DataStorageBoundsChecks
             return "A complete empty storage header, with or without reserved bytes, opens unchanged; no record header is required for the empty sentinel.";
         });
 
+        ctx.Run("data-storage.bounds.raw-recovery-buffer-reload", () =>
+        {
+            byte[] first = new byte[240_001]; // Exceeds recovery's initial scan buffer.
+            first.AsSpan().Fill(0xA5);
+            byte[] second = [1, 2, 3];
+            byte[] image = RecordImage(first.Length, first);
+            int secondPosition = image.Length;
+            Array.Resize(ref image, secondPosition + RecordHeaderSize + second.Length);
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(DataStorage.HeaderOffset), DataStorage.HeaderOffset); // Invalid first Prev.
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(DataStorage.HeaderOffset + 8), secondPosition);
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(secondPosition), DataStorage.HeaderOffset);
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(secondPosition + 8), long.MinValue);
+            BinaryPrimitives.WriteInt32LittleEndian(image.AsSpan(secondPosition + 20), second.Length);
+            second.CopyTo(image, secondPosition + RecordHeaderSize);
+            using var stream = new ProbeStream(image);
+            var serializer = new ProbeSerializer();
+            using var storage = new DataStorage(stream, serializer: serializer, onException: DataStorage.OnException.RecoverOrThrow);
+            Check.Equal(2, storage.Count, "Raw recovery retains both records across a scan-buffer reload.");
+            Check.That(storage.ReadPositions.SequenceEqual(new long[] { DataStorage.HeaderOffset, secondPosition }), "Recovered physical record order.");
+            Check.That(first.AsSpan().SequenceEqual(storage.GetData(DataStorage.HeaderOffset)), "Large recovered payload remains exact.");
+            Check.That(second.AsSpan().SequenceEqual(storage.GetData(secondPosition)), "Following recovered payload remains exact.");
+            Check.Equal(0, serializer.DeserializeCalls, "Raw recovery must not invoke the serializer.");
+            return "Raw recovery retains multiple records and exact payloads when a candidate requires buffer growth and reload, without serialized-data validation.";
+        });
+
+        ctx.Run("data-storage.bounds.recovery-serializer-copy", () =>
+        {
+            byte[] nestedRecord = RecordImage(1, [0x42])[DataStorage.HeaderOffset..];
+            byte[] image = RecordImage(nestedRecord.Length, nestedRecord);
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(DataStorage.HeaderOffset), DataStorage.HeaderOffset); // Invalid outer Prev.
+            using var stream = new ProbeStream(image);
+            var serializer = new MutatingRecoverySerializer();
+            int scanned = 0;
+            using var storage = new DataStorage(stream, scanObjectsCallback: (_, value) => scanned = (int)value!,
+                serializer: serializer, onException: DataStorage.OnException.RecoverOrThrow);
+            Check.Equal(1, storage.Count, "Only the accepted nested recovery candidate remains.");
+            Check.Equal((long)(DataStorage.HeaderOffset + RecordHeaderSize), storage.FirstPosition, "Rejected outer candidate cannot hide the nested header.");
+            Check.Equal(1, serializer.RejectedCandidates, "The outer candidate is validated and rejected.");
+            Check.Equal(2, serializer.AcceptedCandidates, "The nested candidate is validated during recovery and the reopened scan.");
+            Check.Equal(0x42, scanned, "The serializer receives the original recovered payload.");
+            Check.That(storage.GetData(storage.FirstPosition).AsSpan().SequenceEqual(new byte[] { 0x42 }), "Serializer writes cannot change stored payload bytes.");
+            return "Custom recovery validation receives writable independent payload bytes: mutation followed by rejection leaves the overlapping valid header available for recovery.";
+        });
+
         ctx.Run("data-storage.bounds.recovery-policy-boundary", () =>
         {
             AssertConstructorRejects(RecordImage(1, []), "no-scanner", DataStorage.OnException.RecoverOrThrow);
@@ -260,6 +304,27 @@ internal static class DataStorageBoundsChecks
         Check.Equal(0, stream.WriteCalls, "Read/validation must not write the fixture.");
         Check.Equal(0, stream.SetLengthCalls, "Read/validation must not resize the fixture.");
         Check.That(before.AsSpan().SequenceEqual(stream.ToArray()), "Read/validation must preserve exact fixture bytes.");
+    }
+
+    private sealed class MutatingRecoverySerializer : IDataSerializer
+    {
+        public int RejectedCandidates { get; private set; }
+        public int AcceptedCandidates { get; private set; }
+        public void Serialize(Stream stream, object? value) => throw new InvalidOperationException("Read-only fixture serializer.");
+        public object Deserialize(Stream stream)
+        {
+            Check.That(stream.CanWrite, "Custom recovery serializer input remains writable.");
+            int value = stream.ReadByte();
+            stream.Position = 0;
+            stream.WriteByte(0xCC);
+            if (stream.Length != 1)
+            {
+                this.RejectedCandidates++;
+                throw new InvalidDataException("Reject the overlapping outer candidate after mutation.");
+            }
+            this.AcceptedCandidates++;
+            return value;
+        }
     }
 
     private sealed class ProbeSerializer : IDataSerializer

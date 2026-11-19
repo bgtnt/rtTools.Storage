@@ -920,6 +920,7 @@ namespace RtTools
             if (end == long.MinValue) end = this.ioStream.Length;
 
             this.MutationStarting();
+            if (this.spaces.Count == 0) return;
 
             Int64Interval range = new(start, end);
             int i = range.RemoveFrom(this.spaces);
@@ -945,7 +946,14 @@ namespace RtTools
             }
         }
 
-        private Interval<long>? FindFirstToFit(int size) => this.spaces.Find(range => range.Count >= size);
+        private Interval<long>? FindFirstToFit(int size)
+        {
+            foreach (Interval<long> range in this.spaces)
+                if (range.Count >= size)
+                    return range;
+
+            return null;
+        }
 
         #endregion
 

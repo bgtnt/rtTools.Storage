@@ -66,6 +66,36 @@ internal static class DictionaryLoggerChecks
             return "Converter suppression records nothing; transformed sequence/order is encoded during append, survives later array mutation and clean reopen, and does not replace current values.";
         });
 
+        ctx.Run("dictionary-logger.shallow-detached-snapshot", () =>
+        {
+            var paths = Paths(ctx, "shallow-snapshot");
+            using var logger = new DictionaryLogger<string, int[]>(paths.State, paths.History);
+            int[] first = [1];
+            int[] second = [2];
+            logger.Values.Add("first", first);
+            logger.Values.Add("second", second);
+            SerializableKeyValuePair<string, int[]>[]? captured = null;
+            Check.That(logger.LogValues(snapshot =>
+            {
+                Check.That(!Monitor.IsEntered(logger.Values.Storage.SynchronizationRoot),
+                    "Snapshot conversion must run after releasing the dictionary lock.");
+                captured = snapshot;
+                logger.Values["first"] = [9];
+                logger.Values.Remove("second");
+                first[0] = 3;
+                return null!;
+            }) is null, "The converter may suppress a detached snapshot after changing current values.");
+            Check.That(captured != null, "The converter must receive a snapshot.");
+            var map = captured!.ToDictionary(pair => pair.Key, pair => pair.Value);
+            Check.Equal(2, map.Count, "Dictionary mutations must not change captured entries.");
+            Check.That(ReferenceEquals(first, map["first"]) && ReferenceEquals(second, map["second"]),
+                "Snapshot values must retain their original shallow references.");
+            Check.Equal(3, map["first"][0], "Referenced object mutations remain visible through the shallow snapshot.");
+            Check.Equal(9, logger.Values["first"][0], "Replacing a current value must not replace its snapshot reference.");
+            Check.Equal(0L, logger.Log.Count, "Suppression must not append the captured snapshot.");
+            return "Snapshot entries are detached before the unlocked converter runs; replacements/removals preserve captured references, while referenced object mutation remains visible.";
+        });
+
         ctx.Run("dictionary-logger.empty-snapshot", () =>
         {
             var paths = Paths(ctx, "empty");

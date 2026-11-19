@@ -553,12 +553,29 @@ namespace RtTools
 
         #region Find methods
 
-        private int GetFirstEqualIndexFrom(T item, int index)
+        private int GetEqualBoundaryFrom(T item, int index, int direction)
         {
-            while (index > 0) // has room to check
-                if (this.Compare(item, this.items[--index]) != 0) // not equal found
-                    return index + 1;
-            return index;
+            if (index < 0) return index;
+            int limit = direction < 0 ? index : this.Count - index - 1;
+            if (limit == 0 || this.Compare(item, this.items[index + direction]) != 0) return index;
+
+            // Gallop from the known match so short equal runs also stay cheap.
+            int equal = 1, distance = 2;
+            while (distance <= limit && this.Compare(item, this.items[index + direction * distance]) == 0)
+            {
+                equal = distance;
+                if (distance == limit) return index + direction * distance;
+                distance = distance <= limit / 2 ? distance * 2 : limit;
+            }
+
+            int last = Math.Min(distance - 1, limit);
+            while (equal < last)
+            {
+                int mid = equal + ((last - equal + 1) >> 1);
+                if (this.Compare(item, this.items[index + direction * mid]) == 0) equal = mid;
+                else last = mid - 1;
+            }
+            return index + direction * equal;
         }
 
         /// <summary>
@@ -566,24 +583,14 @@ namespace RtTools
         /// </summary>
         /// <param name="item"></param>
         /// <returns></returns>
-        public int FindFirstEqualIndex(T item) => this.GetFirstEqualIndexFrom(item, this.BinarySearch(item));
-
-        private int GetLastEqualIndexFrom(T item, int index)
-        {
-            if (index < 0) return index;
-            int last = this.Count - 1;
-            while (index < last)
-                if (this.Compare(item, this.items[++index]) != 0) // not equal found
-                    return index - 1;
-            return index;
-        }
+        public int FindFirstEqualIndex(T item) => this.GetEqualBoundaryFrom(item, this.BinarySearch(item), -1);
 
         /// <summary>
         /// Find index of last equal item (if repeated - binary search will give random)
         /// </summary>
         /// <param name="item"></param>
         /// <returns></returns>
-        public int FindLastEqualIndex(T item) => this.GetLastEqualIndexFrom(item, this.BinarySearch(item));
+        public int FindLastEqualIndex(T item) => this.GetEqualBoundaryFrom(item, this.BinarySearch(item), 1);
 
         /// <summary>
         /// Get Equal indices as index range
@@ -594,7 +601,7 @@ namespace RtTools
         {
             int index = this.BinarySearch(item);
             if (index < 0) return new Int32Interval(index, index);
-            return new Int32Interval(this.GetFirstEqualIndexFrom(item, index), this.GetLastEqualIndexFrom(item, index) + 1);
+            return new Int32Interval(this.GetEqualBoundaryFrom(item, index, -1), this.GetEqualBoundaryFrom(item, index, 1) + 1);
         }
 
         /// <summary>
@@ -606,9 +613,7 @@ namespace RtTools
         {
             Int32Interval range = this.FindEqualIndices(item);
             T[] ret = new T[range.Count];
-            int ii = 0;
-            for (int i = range.Start; i < range.End; i++)
-                ret[ii++] = this.items[i];
+            if (ret.Length > 0) Array.Copy(this.items, range.Start, ret, 0, ret.Length);
             return ret;
         }
 

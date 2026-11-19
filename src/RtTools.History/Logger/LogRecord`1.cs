@@ -289,15 +289,15 @@ namespace RtTools.Logger
             StoreType st = StoreType.None;
             if (dataLength > fixedDataRoom && dataLength > MinRecordSizeToCompress)
             { // length is ok to try to compress
-                MemoryStream compressedStream = new();
-                using (DeflateStream zipStream = new(compressedStream, CompressionLevel.Fastest))
+                using MemoryStream compressedStream = new();
+                using (DeflateStream zipStream = new(compressedStream, CompressionLevel.Fastest, leaveOpen: true))
                     zipStream.Write(data, 0, dataLength);
 
-                byte[] compressed = compressedStream.ToArray();
-                if (compressed.Length < dataLength)
+                int compressedLength = (int)compressedStream.Length;
+                if (compressedLength < dataLength)
                 {
-                    data = compressed;
-                    dataLength = data.Length;
+                    data = compressedStream.GetBuffer();
+                    dataLength = compressedLength;
                     st = StoreType.Compressed;
                 }
             }

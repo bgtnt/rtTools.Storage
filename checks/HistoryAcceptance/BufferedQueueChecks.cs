@@ -97,7 +97,117 @@ internal static class BufferedQueueChecks
                 bool payloadRead = stream.Reads.Any(read => read.Position < start + 512 && read.Position + read.Count > start);
                 Check.Equal(value <= 4, payloadRead, "Only selected records may have their value payload read during refill: " + value);
             }
-            return "A tracked stream with 512-byte payloads proves refill scans metadata for the backlog but reads/decodes full payloads only for the earliest two selected records.";
+            return "A tracked stream with 512-byte payloads proves refill reads/decodes full payloads only for the earliest two selected records.";
+        });
+
+        ctx.Run("queue.ordered-refill-bounded-metadata", () =>
+        {
+            foreach (bool reopen in new[] { false, true })
+            {
+                using var stream = new RecordingStream();
+                if (reopen)
+                {
+                    string path = PathFor(ctx, "ordered-reopen");
+                    using (var seed = Open(path, 2, ReadPadded, WritePadded))
+                        for (int value = 1; value <= 256; value++) seed.Enqueue(value);
+                    stream.Write(File.ReadAllBytes(path));
+                    stream.Position = 0;
+                }
+                int decoded = 0;
+                using var queue = Open(stream, 2, bytes => { decoded++; return ReadPadded(bytes); }, WritePadded);
+                if (!reopen)
+                    for (int value = 1; value <= 256; value++) queue.Enqueue(value);
+                Check.Equal(1, queue.Dequeue(), "First ordered cached item.");
+                Check.Equal(2, queue.Dequeue(), "Second ordered cached item.");
+                var selectedPositions = queue.Storage.Storage.ReadData
+                    .Where(pair => ReadPadded(pair.Value[12..]) is 3 or 4).Select(pair => pair.Key).ToArray();
+                Check.Equal(2, selectedPositions.Length, "The fixture must locate both selected records.");
+                decoded = 0;
+                stream.Reads.Clear();
+                Check.Equal(3, queue.Peek(), "Ordered refill must select the earliest remaining item.");
+                Check.Equal(2, decoded, "Ordered refill must decode only its bounded prefix.");
+                Check.Equal(2, stream.Reads.Count(read => read.Count == sizeof(ulong)),
+                    "A proven ordered chain must read exactly two ordinal prefixes regardless of the 254-item backlog.");
+                Check.That(stream.Reads.All(read => selectedPositions.Any(position =>
+                    read.Position >= position && read.Position + read.Count <= position + 24 + 12 + 512)),
+                    "Ordered refill must not read headers, ordinals or payloads from the unselected tail.");
+                Check.Equal(2, queue.BufferedCount, "Ordered refill must publish the complete bounded prefix.");
+            }
+            return "New and reopened 256-item ordered chains refill two values with exactly two ordinal reads and no access to the unselected tail.";
+        });
+
+        ctx.Run("queue.recovery-rebuilds-cache-and-order", () =>
+        {
+            byte[] image;
+            long firstPosition, damagedPosition;
+            using (var source = new MemoryStream())
+            {
+                using (var storage = new DataStorage(source))
+                {
+                    firstPosition = storage.Add(Frame(1, WriteInt(1)));
+                    damagedPosition = storage.Add(Frame(2, WriteInt(2)));
+                    storage.Add(Frame(3, WriteInt(3)));
+                    storage.Add(Frame(4, WriteInt(4)));
+                    storage.Add(Frame(5, WriteInt(5)));
+                    storage.Add(Frame(6, WriteInt(6)));
+                }
+                image = source.ToArray();
+            }
+            // Opening decodes two records, then rejects this backward Next link.
+            // Recovery reconnects the two intact chain segments without dropping records.
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(checked((int)damagedPosition + 8)), firstPosition);
+            using var stream = new RecordingStream();
+            stream.Write(image);
+            stream.Position = 0;
+            List<DataStorage.OpenState> states = [];
+            List<int> decoded = [];
+            using var queue = new BufferedQueuePersistent<int>(stream, 2,
+                onException: DataStorage.OnException.RecoverOrThrow,
+                listener: (state, _) => states.Add(state),
+                reader: bytes => { int value = ReadInt(bytes); decoded.Add(value); return value; }, writer: WriteInt);
+            Quiet(queue);
+            Check.That(states.Contains(DataStorage.OpenState.Recovered), "The fixture must emit an actual policy recovery notification.");
+            Check.That(states.Any(state => (state & DataStorage.OpenState.Opened) != 0), "The repaired queue must complete opening.");
+            Same(new[] { 1, 2, 1, 2, 3, 4, 5, 6 }, decoded,
+                "The initial partial scan must be followed by a complete replay of the repaired chain. Actual=" + string.Join(",", decoded));
+            Check.Equal(6, queue.Count, "Recovery must retain all six intact queue records.");
+            Check.Equal(2, queue.BufferedCount, "Recovery must rebuild the bounded cache without provisional duplicates.");
+            Check.Equal(1, queue.Dequeue(), "The rebuilt cache must start with the first recovered item.");
+            Check.Equal(2, queue.Dequeue(), "The rebuilt cache must contain the second recovered item exactly once.");
+            decoded.Clear();
+            stream.Reads.Clear();
+            Check.Equal(3, queue.Peek(), "The recovered queue must refill from the repaired FIFO prefix.");
+            Same(new[] { 3, 4 }, decoded, "Recovery refill must decode only its bounded prefix.");
+            Check.Equal(2, stream.Reads.Count(read => read.Count == sizeof(ulong)),
+                "Recovery must reset the partial-scan proof and establish ordering from the complete repaired scan.");
+            foreach (int value in new[] { 3, 4, 5, 6 }) Check.Equal(value, queue.Dequeue(), "The recovered queue must drain each retained item exactly once.");
+            queue.Enqueue(7);
+            Same(new ulong[] { 7 }, Ordinals(queue), "Recovery must rebuild the maximum ordinal for the next enqueue.");
+            Check.Equal(7, queue.Dequeue(), "The recovered queue must remain usable after draining.");
+            return "A backward second Next link triggers actual RecoverOrThrow repair after two decoded records; complete replay rebuilds the cache, ordered prefix proof and max ordinal, then bounded refill/drain/enqueue succeed.";
+        });
+
+        ctx.Run("queue.duplicate-ordinal-fallback", () =>
+        {
+            byte[] seed;
+            using (var source = new MemoryStream())
+            {
+                using (var storage = new DataStorage(source))
+                {
+                    storage.Add(Frame(1, WriteInt(10)));
+                    storage.Add(Frame(1, WriteInt(20)));
+                    storage.Add(Frame(1, WriteInt(30)));
+                    storage.Add(Frame(2, WriteInt(40)));
+                }
+                seed = source.ToArray();
+            }
+            using var queue = Open(new MemoryStream(seed), 1);
+            Check.Equal(30, queue.Dequeue(), "Opening retains the existing bounded-selection behavior for equal ordinals.");
+            Check.Equal(20, queue.Peek(), "Duplicate ordinals must keep full-chain selection rather than assuming a strictly increasing FIFO prefix.");
+            Check.Equal(20, queue.Dequeue(), "Refill must preserve duplicate-ordinal selection order.");
+            Check.Equal(10, queue.Dequeue(), "The remaining equal-ordinal item must still be available.");
+            Check.Equal(40, queue.Dequeue(), "Later ordinals must follow every equal-ordinal item.");
+            return "Persisted duplicate ordinals retain the existing bounded-selection tie behavior during opening and refill, requiring the conservative fallback.";
         });
 
         ctx.Run("queue.codec-failures-preserve-state", () =>
@@ -205,6 +315,52 @@ internal static class BufferedQueueChecks
             return "The existing default serializer supports null/string values across reopen; enumeration captures a full sorted snapshot at first MoveNext and excludes later enqueues.";
         });
 
+        ctx.Run("queue.snapshot-failure-and-lifetime", () =>
+        {
+            using var stream = new MemoryStream();
+            BufferedQueuePersistent<int>? queue = null;
+            bool fail = true;
+            int decoded = 0;
+            var failure = new InvalidDataException("controlled enumeration decoder failure");
+            queue = Open(stream, 1, bytes =>
+            {
+                Check.That(Monitor.IsEntered(queue!.Storage.SynchronizationRoot),
+                    "Enumeration decoding must hold the storage lock.");
+                decoded++;
+                int value = ReadInt(bytes);
+                return fail && value == 2 ? throw failure : value;
+            }, WriteInt);
+            using (queue)
+            {
+                queue.Enqueue(1);
+                queue.Enqueue(2);
+                byte[] before = stream.ToArray();
+                using var rejected = queue.GetEnumerator();
+                Check.Equal(0, decoded, "Creating an enumerator must defer snapshot reads.");
+                Check.That(ReferenceEquals(failure, Check.Throws<InvalidDataException>(() => rejected.MoveNext(),
+                    "A snapshot decoder failure must escape before any value is yielded.")), "Enumeration must preserve the exact decoder exception.");
+                Check.Equal(2, decoded, "The failing enumeration must decode through the failing record.");
+                Check.Equal(2, queue.Count, "A failed snapshot must preserve queue count.");
+                Check.Equal(1, queue.BufferedCount, "A failed snapshot must preserve the front cache.");
+                Same(before, stream.ToArray(), "A failed snapshot must preserve persisted bytes.");
+                fail = false;
+                decoded = 0;
+                using var snapshot = queue.GetEnumerator();
+                queue.Enqueue(3);
+                Check.Equal(0, decoded, "Mutation before first MoveNext must precede snapshot capture.");
+                Check.That(snapshot.MoveNext() && snapshot.Current == 1, "Retry must capture the complete current FIFO sequence.");
+                Check.Equal(3, decoded, "The first MoveNext must eagerly decode the whole snapshot.");
+                queue.Clear();
+                queue.Enqueue(4);
+                queue.Dispose();
+                List<int> remaining = [];
+                while (snapshot.MoveNext()) remaining.Add(snapshot.Current);
+                Same(new[] { 2, 3 }, remaining, "A started snapshot must survive Clear, later enqueue and disposal.");
+                Check.Equal(3, decoded, "A started snapshot must not decode again after releasing the lock.");
+            }
+            return "Enumeration defers reads until first MoveNext, preserves decoder errors/state, retries cleanly, and retains its complete FIFO snapshot across later Clear/enqueue/disposal without further reads.";
+        });
+
         ctx.Run("queue.invalid-frame-and-open-cleanup", () =>
         {
             byte[][] invalid = [new byte[11], Frame(1, WriteInt(1), -1), Frame(1, WriteInt(1), 3), Frame(1, WriteInt(1), 5)];
@@ -292,7 +448,7 @@ internal static class BufferedQueueChecks
             Same(new[] { 2, 9 }, selected.ToArray(), "Selection list must support front removal and later append.");
             selected.Clear();
             Check.Equal(0, selected.Count, "Clear must empty the dependency.");
-            return "The unmodified LimitedList dependency preserves bounded ring Add, front removal, binary-search/top-k insertion, ignored full tail insertion and Clear used by the queue.";
+            return "The LimitedList dependency preserves bounded ring Add, front removal, binary-search/top-k insertion, ignored full tail insertion and Clear used by the queue.";
         });
     }
 

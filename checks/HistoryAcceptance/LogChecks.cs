@@ -73,6 +73,46 @@ internal static class LogChecks
             return $"25 exact rows, two overlapping promoted runs plus memory; FindAll sorted; ForEach globally sorted={IsSorted(visited)}, first keys={prefix}; equal-key arrival order unconstrained.";
         }, characterization: true);
 
+        ctx.Run("log.small-runs-and-selective-find", () =>
+        {
+            string mask = NewMask(ctx, "small-runs");
+            var expected = new List<ExpectedRow>();
+            using var log = Open(mask, deleteSupported: true);
+            using var client = log.CreateClient();
+            for (int run = 0; run < 32; run++)
+            {
+                ExpectedRow[] rows = Enumerable.Range(0, 12).Select(key => Row(key, run * 12 + key)).ToArray();
+                expected.AddRange(rows);
+                Append(log, rows.Reverse());
+                log.Publish();
+            }
+            ExpectedRow[] memory = Enumerable.Range(3, 6).Select(key => Row(key, 1000 + key)).ToArray();
+            expected.AddRange(memory);
+            Append(log, memory.Reverse());
+            log.Publish();
+            Check.Equal(384L * RecordSize, Length(mask, ".data"), "Every small sorted run must be promoted separately.");
+            Check.Equal(6L * RecordSize, Length(mask, ".buffer"), "A final memory run must remain published.");
+            AssertRows(log.FindAll(K(0), K(12)), expected, true, "Many small promoted runs plus memory");
+            AssertRows(client.FindAll(K(0), K(12)), expected, true, "Client many small runs");
+            ExpectedRow[] selected = expected.Where(row => row.Key >= 4 && row.Key < 6).ToArray();
+            AssertRows(log.FindAll(K(4), K(6)), selected, true, "Selective run merging");
+            AssertRows(client.FindAll(K(0), K(12), key => key.Value >= 4 && key.Value < 6), selected, true, "Predicate-filtered run merging");
+            Check.Equal(33L, log.DeleteAll(K(5), K(6)), "Deletion must cover all duplicate main and memory keys.");
+            AssertRows(client.FindAll(K(4), K(6)), selected.Where(row => row.Key != 5).ToArray(), true, "Live selective run merging");
+            AssertRows(log.FindAll(K(4), K(6), deleted: true), selected, true, "Deleted-inclusive selective run merging");
+            ExpectedRow[] liveBeforeOverflow = expected.Where(row => row.Key != 5).ToArray();
+            ExpectedRow[] overflow = Enumerable.Range(0, 3800).Select(i => Row(i % 12, 2000 + i)).ToArray();
+            Append(log, overflow.Take(3706));
+            log.Publish();
+            AssertRows(client.FindAll(K(0), K(12), deleted: true), [.. expected, .. overflow.Take(3706)], true, "Exact 4096-record incremental result");
+            Append(log, overflow.Skip(3706));
+            log.Publish();
+            expected.AddRange(overflow);
+            AssertRows(log.FindAll(K(0), K(12)), [.. liveBeforeOverflow, .. overflow], true, "Large live merge fallback");
+            AssertRows(client.FindAll(K(0), K(12), deleted: true), expected, true, "Large deleted-inclusive merge fallback");
+            return "32 overlapping small main runs plus memory preserve selective/predicate/deleted queries; an added 3800 rows cross the 4096-result cutoff with exact sorted live and deleted-inclusive payloads.";
+        });
+
         ctx.Run("log.payload-layout-and-clean-reopen", () =>
         {
             string mask = NewMask(ctx, "payloads");
